@@ -261,29 +261,58 @@ namespace NoSlimes.Util.DevCon
                 return;
 
             string[] parts = currentText.Split(' ');
-            string prefix = parts[0].ToLower();
+            string commandPrefix = parts[0].ToLower();
 
-            var matches = new List<string>();
-            foreach (var kv in registry.Commands.Keys)
+            if (commandPrefix == "help")
             {
-                if (kv.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    matches.Add(kv);
+                string argPrefix = parts.Length > 1 ? parts[1].ToLower() : "";
+
+                var matches = new List<string>();
+                foreach (var kv in registry.Commands.Keys)
+                {
+                    if (string.IsNullOrEmpty(argPrefix) || kv.StartsWith(argPrefix, StringComparison.OrdinalIgnoreCase))
+                        matches.Add(kv);
+                }
+
+                if (matches.Count == 0)
+                    return;
+
+                if (matches.Count == 1)
+                {
+                    parts = new string[] { "help", matches[0] };
+                    inputField.text = string.Join(" ", parts);
+                    StartCoroutine(MoveCaretToEndCoroutine());
+                }
+                else
+                {
+                    LogToConsole("Help matches: " + string.Join(", ", matches));
+                }
+
+                return;
             }
 
-            if (matches.Count == 0)
+            var commandMatches = new List<string>();
+            foreach (var kv in registry.Commands.Keys)
+            {
+                if (kv.StartsWith(commandPrefix, StringComparison.OrdinalIgnoreCase))
+                    commandMatches.Add(kv);
+            }
+
+            if (commandMatches.Count == 0)
                 return;
 
-            if (matches.Count == 1)
+            if (commandMatches.Count == 1)
             {
-                parts[0] = matches[0];
+                parts[0] = commandMatches[0];
                 inputField.text = string.Join(" ", parts);
                 StartCoroutine(MoveCaretToEndCoroutine());
             }
             else
             {
-                LogToConsole("Matches: " + string.Join(", ", matches));
+                LogToConsole("Matches: " + string.Join(", ", commandMatches));
             }
         }
+
 
 #if ENABLE_INPUT_SYSTEM
         private void OnToggleConsoleAction(InputAction.CallbackContext context) => ToggleConsole();
