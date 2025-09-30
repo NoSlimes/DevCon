@@ -90,6 +90,7 @@ namespace NoSlimes.Util.DevCon
                 commandHistory.Add(cmd);
                 inputField.text = "";
 
+                commandHistoryIndex = -1;
                 FocusInputField();
             });
 
