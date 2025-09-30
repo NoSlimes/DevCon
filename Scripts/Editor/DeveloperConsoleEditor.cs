@@ -1,14 +1,16 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace NoSlimes.Util.DeveloperConsole
+namespace NoSlimes.Util.DevCon
 {
-    [CustomEditor(typeof(DeveloperConsole))]
+    [CustomEditor(typeof(DeveloperConsoleUI))]
     public class DeveloperConsoleEditor : UnityEditor.Editor
     {
         private SerializedProperty inputSystemProp;
         private SerializedProperty toggleConsoleActionProp;
+        private SerializedProperty autoCompleteActionProp;
         private SerializedProperty toggleConsoleKeyProp;
+        private SerializedProperty autoCompleteKeyProp;
         private SerializedProperty consolePanelProp;
         private SerializedProperty inputFieldProp;
         private SerializedProperty scrollRectProp;
@@ -19,13 +21,16 @@ namespace NoSlimes.Util.DeveloperConsole
 
         private void OnEnable()
         {
+#if ENABLE_INPUT_SYSTEM
             inputSystemProp = serializedObject.FindProperty("inputSystem");
 
-#if ENABLE_INPUT_SYSTEM
             toggleConsoleActionProp = serializedObject.FindProperty("toggleConsoleAction");
+            autoCompleteActionProp = serializedObject.FindProperty("autoCompleteAction");
+
 #endif
 
             toggleConsoleKeyProp = serializedObject.FindProperty("toggleConsoleKey");
+            autoCompleteKeyProp = serializedObject.FindProperty("autoCompleteKey");
             consolePanelProp = serializedObject.FindProperty("consolePanel");
             inputFieldProp = serializedObject.FindProperty("inputField");
             scrollRectProp = serializedObject.FindProperty("scrollRect");
@@ -43,21 +48,25 @@ namespace NoSlimes.Util.DeveloperConsole
 
             EditorGUILayout.PropertyField(inputSystemProp);
 
-            DeveloperConsole.InputSystemType selectedInputSystem = (DeveloperConsole.InputSystemType)inputSystemProp.enumValueIndex;
+            DeveloperConsoleUI.InputSystemType selectedInputSystem = (DeveloperConsoleUI.InputSystemType)inputSystemProp.enumValueIndex;
 
 #if ENABLE_INPUT_SYSTEM
             switch (selectedInputSystem)
             {
-                case DeveloperConsole.InputSystemType.New:
+                case DeveloperConsoleUI.InputSystemType.New:
                     EditorGUILayout.PropertyField(toggleConsoleActionProp);
+                    EditorGUILayout.PropertyField(autoCompleteActionProp);
                     break;
 
-                case DeveloperConsole.InputSystemType.Old:
+                case DeveloperConsoleUI.InputSystemType.Old:
                     EditorGUILayout.PropertyField(toggleConsoleKeyProp);
+                    EditorGUILayout.PropertyField(autoCompleteKeyProp);
                     break;
             }
 #else
             EditorGUILayout.PropertyField(toggleConsoleKeyProp);
+            EditorGUILayout.PropertyField(autoCompleteKeyProp);
+            EditorGUILayout.HelpBox("The new Input System package is not enabled. Please enable it in Project Settings to use new input features.", MessageType.Info);
 #endif
 
             EditorGUILayout.Space(10);
