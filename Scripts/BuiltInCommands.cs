@@ -128,7 +128,7 @@ namespace NoSlimes.Util.DevCon
         [ConsoleCommand("resolutions", "Lists supported screen resolutions.")]
         public static void ResolutionsCommand()
         {
-            var resolutions = Screen.resolutions.Select(r => $"{r.width}x{r.height}@{r.refreshRate}Hz");
+            var resolutions = Screen.resolutions.Select(r => $"{r.width}x{r.height}@{r.refreshRateRatio}Hz");
             Debug.Log("Supported resolutions:\n" + string.Join("\n", resolutions));
         }
 
