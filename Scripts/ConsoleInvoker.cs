@@ -10,6 +10,10 @@ namespace NoSlimes.Util.DevCon
     {
         private readonly ConsoleCommandRegistry _registry;
 
+        /// <summary>
+        /// Where command responses and console feedback are routed.
+        /// By default does nothing (no spam in Unity logs).
+        /// </summary>
         public Action<string> LogHandler { get; set; } = msg => { };
 
         public ConsoleInvoker(ConsoleCommandRegistry registry)
@@ -57,11 +61,20 @@ namespace NoSlimes.Util.DevCon
                 var parameters = methodInfo.GetParameters();
                 object[] finalArgs = new object[parameters.Length];
 
-                for (int i = 0; i < parameters.Length; i++)
+                // Does this command take a response parameter?
+                bool hasResponse = parameters.Length > 0 && parameters[0].ParameterType == typeof(Action<string>);
+                int paramOffset = hasResponse ? 1 : 0;
+
+                if (hasResponse)
+                    finalArgs[0] = LogHandler;
+
+                for (int i = paramOffset; i < parameters.Length; i++)
                 {
-                    if (i < args.Length)
+                    int argIndex = i - paramOffset; // shift if response is present
+
+                    if (argIndex < args.Length)
                     {
-                        try { finalArgs[i] = ConvertArg(args[i], parameters[i].ParameterType); }
+                        try { finalArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType); }
                         catch (Exception e) { LogHandler($"<color=red>Error: {e.Message}</color>"); return; }
                     }
                     else
@@ -73,9 +86,20 @@ namespace NoSlimes.Util.DevCon
 
                 object target = methodInfo.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(methodInfo.DeclaringType);
                 if (target != null || methodInfo.IsStatic)
-                    methodInfo.Invoke(target, finalArgs);
+                {
+                    try
+                    {
+                        methodInfo.Invoke(target, finalArgs);
+                    }
+                    catch (Exception e)
+                    {
+                        LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>");
+                    }
+                }
                 else
+                {
                     LogHandler($"<color=red>Error: Could not find instance of '{methodInfo.DeclaringType.Name}' for command '{command}'.</color>");
+                }
             }
             else
             {
@@ -95,8 +119,12 @@ namespace NoSlimes.Util.DevCon
                     var attribute = kv.Value.GetCustomAttribute<ConsoleCommandAttribute>();
                     var parameters = kv.Value.GetParameters();
 
-                    string argsInfo = string.Join(" ", parameters.Select(p =>
-                        p.HasDefaultValue ? $"<{p.Name}={p.DefaultValue}>" : $"<{p.Name}>"));
+                    string argsInfo = string.Join(" ", parameters
+                        .Where((p, index) => !(index == 0 && p.ParameterType == typeof(Action<string>)))
+                        .Select(p =>
+                            p.HasDefaultValue
+                                ? $"<{p.Name}={p.DefaultValue}>"
+                                : $"<{p.Name}>"));
 
                     helpBuilder.AppendLine($"{attribute.Command} {argsInfo} - {attribute.Description}");
                 }
@@ -109,8 +137,12 @@ namespace NoSlimes.Util.DevCon
                     var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
                     var parameters = method.GetParameters();
 
-                    string argsInfo = string.Join(" ", parameters.Select(p =>
-                        p.HasDefaultValue ? $"<{p.Name}={p.DefaultValue}>" : $"<{p.Name}>"));
+                    string argsInfo = string.Join(" ", parameters
+                        .Where((p, index) => !(index == 0 && p.ParameterType == typeof(Action<string>)))
+                        .Select(p =>
+                            p.HasDefaultValue
+                                ? $"<{p.Name}={p.DefaultValue}>"
+                                : $"<{p.Name}>"));
 
                     helpBuilder.AppendLine($"Command: {attribute.Command}");
                     helpBuilder.AppendLine($"Description: {attribute.Description}");

@@ -327,10 +327,10 @@ namespace NoSlimes.Util.DevCon
 
         #region Built-in basic commands
         [ConsoleCommand("help", "Shows a list of commands or details for one command.")]
-        public static void HelpCommand(string commandName = "")
+        public static void HelpCommand(Action<string> response, string commandName = "")
         {
             string output = _instance.invoker.GetHelp(commandName);
-            UnityEngine.Debug.Log(output);
+            response(output);
         }
 
         [ConsoleCommand("clear", "Clears the console log.")]
