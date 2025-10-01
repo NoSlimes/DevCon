@@ -17,8 +17,8 @@ namespace NoSlimes.Util.DevCon
         private SerializedProperty consoleLogProp;
         private SerializedProperty maxLogLinesProp;
         private SerializedProperty dontDestroyOnLoadProp;
+        private SerializedProperty catchUnityLogsProp;
         private SerializedProperty controlCursorLockModeProp;
-
         private void OnEnable()
         {
 #if ENABLE_INPUT_SYSTEM
@@ -37,6 +37,7 @@ namespace NoSlimes.Util.DevCon
             consoleLogProp = serializedObject.FindProperty("consoleLog");
             maxLogLinesProp = serializedObject.FindProperty("maxLogLines");
             dontDestroyOnLoadProp = serializedObject.FindProperty("dontDestroyOnLoad");
+            catchUnityLogsProp = serializedObject.FindProperty("catchUnityLogs");
             controlCursorLockModeProp = serializedObject.FindProperty("controlCursorLockMode");
         }
 
@@ -82,6 +83,7 @@ namespace NoSlimes.Util.DevCon
 
             EditorGUILayout.LabelField("Console Behavior", EditorStyles.boldLabel);
             EditorGUILayout.PropertyField(dontDestroyOnLoadProp);
+            EditorGUILayout.PropertyField(catchUnityLogsProp);
             EditorGUILayout.PropertyField(controlCursorLockModeProp);
 
             serializedObject.ApplyModifiedProperties();

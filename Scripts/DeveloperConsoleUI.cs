@@ -31,6 +31,7 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private TMP_Text consoleLog;
         [SerializeField] private int maxLogLines = 100;
         [SerializeField] private bool dontDestroyOnLoad = true;
+        [SerializeField] private bool catchUnityLogs = true;
         [SerializeField] private bool controlCursorLockMode = false;
 
         private ConsoleCommandRegistry registry;
@@ -81,7 +82,9 @@ namespace NoSlimes.Util.DevCon
 
         private void OnEnable()
         {
-            Application.logMessageReceived += HandleLogMessage;
+            if (catchUnityLogs)
+                Application.logMessageReceived += HandleLogMessage;
+
             inputField.onSubmit.AddListener((cmd) =>
             {
                 if (string.IsNullOrWhiteSpace(cmd)) return;
@@ -125,7 +128,9 @@ namespace NoSlimes.Util.DevCon
 
         private void OnDisable()
         {
-            Application.logMessageReceived -= HandleLogMessage;
+            if(catchUnityLogs)
+                Application.logMessageReceived -= HandleLogMessage;
+
             inputField.onSubmit.RemoveAllListeners();
 
 #if ENABLE_INPUT_SYSTEM
@@ -173,6 +178,7 @@ namespace NoSlimes.Util.DevCon
                 LogType.Exception => "red",
                 _ => "white",
             };
+
             LogToConsole($"<color={color}>{logString}</color>");
         }
 
@@ -228,7 +234,7 @@ namespace NoSlimes.Util.DevCon
             if (commandHistory.Count == 0) return;
 
             if (commandHistoryIndex == -1)
-                commandHistoryIndex = commandHistory.Count; 
+                commandHistoryIndex = commandHistory.Count;
 
             commandHistoryIndex += direction;
 

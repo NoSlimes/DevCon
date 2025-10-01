@@ -1189,6 +1189,7 @@ MonoBehaviour:
   consoleLog: {fileID: 6241272918674890204}
   maxLogLines: 100
   dontDestroyOnLoad: 1
+  catchUnityLogs: 0
   controlCursorLockMode: 0
 --- !u!1 &8077833049188354319
 GameObject:
