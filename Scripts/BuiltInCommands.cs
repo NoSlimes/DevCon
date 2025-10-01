@@ -67,6 +67,16 @@ namespace NoSlimes.Util.DevCon
             UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
         }
 
+        [ConsoleCommand("listScenes", "Lists all scenes in the build settings.")]
+        public static void ListScenesCommand()
+        {
+            var scenes = Enumerable
+                .Range(0, UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings)
+                .Select(i => System.IO.Path.GetFileNameWithoutExtension(UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(i)));
+           
+            Debug.Log("Scenes in build settings: " + string.Join(", ", scenes));
+        }
+
         #endregion
 
         #region Time & Physics
