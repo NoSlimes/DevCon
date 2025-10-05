@@ -35,7 +35,7 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private bool controlCursorLockMode = false;
 
         private ConsoleCommandRegistry registry;
-        private ConsoleInvoker invoker;
+        private ConsoleCommandInvoker invoker;
 
         private readonly List<string> logHistory = new();
         private readonly List<string> commandHistory = new();
@@ -43,7 +43,7 @@ namespace NoSlimes.Util.DevCon
         private CursorLockMode originalCursorLockMode;
 
         public static ConsoleCommandRegistry Registry => _instance != null ? _instance.registry : null;
-        public static ConsoleInvoker Invoker => _instance != null ? _instance.invoker : null;
+        public static ConsoleCommandInvoker Invoker => _instance != null ? _instance.invoker : null;
 
         public static event Action<bool> OnConsoleToggled;
 
@@ -76,7 +76,7 @@ namespace NoSlimes.Util.DevCon
             registry = new ConsoleCommandRegistry();
             registry.DiscoverCommands();
 
-            invoker = new ConsoleInvoker(registry);
+            invoker = new ConsoleCommandInvoker(registry);
             invoker.LogHandler = LogToConsole;
         }
 
@@ -90,7 +90,10 @@ namespace NoSlimes.Util.DevCon
                 if (string.IsNullOrWhiteSpace(cmd)) return;
 
                 invoker.Execute(cmd);
-                commandHistory.Add(cmd);
+
+                if (commandHistory.Count == 0 || commandHistory[^1] != cmd)
+                    commandHistory.Add(cmd);
+
                 inputField.text = "";
 
                 commandHistoryIndex = -1;
@@ -128,7 +131,7 @@ namespace NoSlimes.Util.DevCon
 
         private void OnDisable()
         {
-            if(catchUnityLogs)
+            if (catchUnityLogs)
                 Application.logMessageReceived -= HandleLogMessage;
 
             inputField.onSubmit.RemoveAllListeners();
@@ -221,6 +224,12 @@ namespace NoSlimes.Util.DevCon
 
             consoleLog.text = string.Join("\n", logHistory);
             StartCoroutine(ScrollToBottomCoroutine());
+        }
+
+        private void LogToConsole(string message, bool success)
+        {
+            string color = success ? "white" : "red";
+            LogToConsole($"<color={color}>{message}</color>");
         }
 
         private IEnumerator ScrollToBottomCoroutine()
@@ -335,6 +344,21 @@ namespace NoSlimes.Util.DevCon
 
         [ConsoleCommand("clear", "Clears the console log.")]
         public static void ClearCommand() => ClearLog();
+
+        [ConsoleCommand("toggleUnityLogs", "Toggles display of unity debug logs")]
+        public static void ToggleUnityLogsCommand(Action<string> response)
+        {
+            if (_instance == null) return;
+            _instance.catchUnityLogs = !_instance.catchUnityLogs;
+
+            if (_instance.catchUnityLogs)
+                Application.logMessageReceived += _instance.HandleLogMessage;
+            else
+                Application.logMessageReceived -= _instance.HandleLogMessage;
+
+            var color = _instance.catchUnityLogs ? "green" : "red";
+            response($"Unity logs are now <color={color}>{(_instance.catchUnityLogs ? "enabled" : "disabled")}</color>");
+        }
         #endregion
     }
 }

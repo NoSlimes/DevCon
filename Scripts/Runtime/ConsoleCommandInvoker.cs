@@ -6,17 +6,16 @@ using System.Text.RegularExpressions;
 
 namespace NoSlimes.Util.DevCon
 {
-    public class ConsoleInvoker
+    public class ConsoleCommandInvoker
     {
         private readonly ConsoleCommandRegistry _registry;
 
         /// <summary>
         /// Where command responses and console feedback are routed.
-        /// By default does nothing (no spam in Unity logs).
         /// </summary>
-        public Action<string> LogHandler { get; set; } = msg => { };
+        public Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
 
-        public ConsoleInvoker(ConsoleCommandRegistry registry)
+        public ConsoleCommandInvoker(ConsoleCommandRegistry registry)
         {
             _registry = registry;
         }
@@ -48,7 +47,7 @@ namespace NoSlimes.Util.DevCon
         {
             if (string.IsNullOrWhiteSpace(input)) return;
 
-            LogHandler("> " + input);
+            LogHandler("> " + input, true);
 
             string[] parts = Tokenize(input);
             if (parts.Length == 0) return;
@@ -61,26 +60,55 @@ namespace NoSlimes.Util.DevCon
                 var parameters = methodInfo.GetParameters();
                 object[] finalArgs = new object[parameters.Length];
 
-                // Does this command take a response parameter?
-                bool hasResponse = parameters.Length > 0 && parameters[0].ParameterType == typeof(Action<string>);
+                bool hasResponse = parameters.Length > 0 &&
+                    (parameters[0].ParameterType == typeof(Action<string>) ||
+                     parameters[0].ParameterType == typeof(Action<string, bool>));
+
                 int paramOffset = hasResponse ? 1 : 0;
 
                 if (hasResponse)
-                    finalArgs[0] = LogHandler;
+                {
+                    if (parameters[0].ParameterType == typeof(Action<string, bool>))
+                    {
+                        finalArgs[0] = LogHandler;
+                    }
+                    else
+                    {
+                        finalArgs[0] = new Action<string>(msg => LogHandler(msg, true));
+                    }
+                }
+
+                int expectedArgs = parameters.Length - paramOffset;
+                if (args.Length > expectedArgs)
+                {
+                    LogHandler($"<color=red>Error: Too many arguments for command '{command}'. Expected {expectedArgs}, got {args.Length}.</color>", false);
+                    return;
+                }
 
                 for (int i = paramOffset; i < parameters.Length; i++)
                 {
-                    int argIndex = i - paramOffset; // shift if response is present
+                    int argIndex = i - paramOffset; 
 
                     if (argIndex < args.Length)
                     {
-                        try { finalArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType); }
-                        catch (Exception e) { LogHandler($"<color=red>Error: {e.Message}</color>"); return; }
+                        try
+                        {
+                            finalArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
+                        }
+                        catch (Exception e)
+                        {
+                            LogHandler($"<color=red>Error: {e.Message}</color>", false);
+                            return;
+                        }
                     }
                     else
                     {
                         if (parameters[i].HasDefaultValue) finalArgs[i] = parameters[i].DefaultValue;
-                        else { LogHandler($"<color=red>Error: Missing required argument '{parameters[i].Name}'.</color>"); return; }
+                        else
+                        {
+                            LogHandler($"<color=red>Error: Missing required argument '{parameters[i].Name}'.</color>", false);
+                            return;
+                        }
                     }
                 }
 
@@ -93,17 +121,17 @@ namespace NoSlimes.Util.DevCon
                     }
                     catch (Exception e)
                     {
-                        LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>");
+                        LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>", false);
                     }
                 }
                 else
                 {
-                    LogHandler($"<color=red>Error: Could not find instance of '{methodInfo.DeclaringType.Name}' for command '{command}'.</color>");
+                    LogHandler($"<color=red>Error: Could not find instance of '{methodInfo.DeclaringType.Name}' for command '{command}'.</color>", false);
                 }
             }
             else
             {
-                LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>");
+                LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>", false);
             }
         }
 
@@ -120,7 +148,9 @@ namespace NoSlimes.Util.DevCon
                     var parameters = kv.Value.GetParameters();
 
                     string argsInfo = string.Join(" ", parameters
-                        .Where((p, index) => !(index == 0 && p.ParameterType == typeof(Action<string>)))
+                        .Where((p, index) => !(index == 0 &&
+                            (p.ParameterType == typeof(Action<string>) ||
+                             p.ParameterType == typeof(Action<string, bool>))))
                         .Select(p =>
                             p.HasDefaultValue
                                 ? $"<{p.Name}={p.DefaultValue}>"
@@ -138,7 +168,9 @@ namespace NoSlimes.Util.DevCon
                     var parameters = method.GetParameters();
 
                     string argsInfo = string.Join(" ", parameters
-                        .Where((p, index) => !(index == 0 && p.ParameterType == typeof(Action<string>)))
+                        .Where((p, index) => !(index == 0 &&
+                            (p.ParameterType == typeof(Action<string>) ||
+                             p.ParameterType == typeof(Action<string, bool>))))
                         .Select(p =>
                             p.HasDefaultValue
                                 ? $"<{p.Name}={p.DefaultValue}>"
