@@ -56,9 +56,3 @@ Commands are invoked by typing in the console:
 * First parameter can optionally be a callback (`Action<string>` or `Action<string, bool>`).
 * Remaining parameters are automatically converted from strings.
 * Errors are logged automatically if arguments are missing or invalid.
-
-
-## Notes
-
-* Commands can be **modified** and **extended** freely.
-* The response callback allows commands to report success or failure.
