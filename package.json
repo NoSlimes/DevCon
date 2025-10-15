@@ -1,0 +1,20 @@
+{
+  "name": "com.noslimes.DevCon",
+  "version": "1.0.0",
+  "displayName": "DevCon",
+  "description": "An in-game console for entering and running commands",
+  "unity": "2022.3",
+  "author": {
+    "name": "NoSlimes"
+  },
+  "keywords": [
+    "console",
+    "debug",
+    "tool"
+  ],
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/NoSlimes/DevCon.git"
+  },
+  "license": "MIT"
+}
