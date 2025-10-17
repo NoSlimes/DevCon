@@ -96,7 +96,6 @@ namespace NoSlimes.Util.DevCon
             Debug.Log($"[DevConsole] Built command cache with {_cache.Commands.Length} entries.");
         }
 #endif
-
         public static void LoadCache()
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -110,16 +109,30 @@ namespace NoSlimes.Util.DevCon
             foreach (var entry in _cache.Commands)
             {
                 Type type = Type.GetType(entry.DeclaringType);
+                if (type == null)
+                {
+                    Debug.LogWarning($"Type '{entry.DeclaringType}' not found.");
+                    continue;
+                }
 
-                if (_cache.ExcludeBuiltInCommands && type.FullName == typeof(BuiltInCommands).FullName)
+                if (_cache.ExcludeBuiltInCommands && type == typeof(BuiltInCommands))
                     continue;
 
-                MethodInfo method = type.GetMethod(entry.MethodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+                var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
+                                  .Where(m => m.Name == entry.MethodName)
+                                  .ToArray();
 
-                if (!_commands.ContainsKey(entry.CommandName.ToLower()))
-                    _commands[entry.CommandName.ToLower()] = new List<MethodInfo>();
+                if (methods.Length == 0)
+                {
+                    Debug.LogWarning($"Method '{entry.MethodName}' not found on type '{type.FullName}'.");
+                    continue;
+                }
 
-                _commands[entry.CommandName.ToLower()].Add(method);
+                string key = entry.CommandName.ToLower();
+                if (!_commands.ContainsKey(key))
+                    _commands[key] = new List<MethodInfo>();
+
+                _commands[key].AddRange(methods);
             }
 
             stopwatch.Stop();
