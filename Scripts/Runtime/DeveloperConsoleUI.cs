@@ -6,6 +6,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
+using System.Linq;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -34,16 +35,10 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private bool catchUnityLogs = true;
         [SerializeField] private bool controlCursorLockMode = false;
 
-        private ConsoleCommandRegistry registry;
-        private ConsoleCommandInvoker invoker;
-
         private readonly List<string> logHistory = new();
         private readonly List<string> commandHistory = new();
         private int commandHistoryIndex = -1;
         private CursorLockMode originalCursorLockMode;
-
-        public static ConsoleCommandRegistry Registry => _instance != null ? _instance.registry : null;
-        public static ConsoleCommandInvoker Invoker => _instance != null ? _instance.invoker : null;
 
         public static event Action<bool> OnConsoleToggled;
 
@@ -73,11 +68,19 @@ namespace NoSlimes.Util.DevCon
             GetComponentInChildren<Canvas>().sortingOrder = 1000;
             if (dontDestroyOnLoad) DontDestroyOnLoad(gameObject);
 
-            registry = new ConsoleCommandRegistry();
-            registry.DiscoverCommands();
 
-            invoker = new ConsoleCommandInvoker(registry);
-            invoker.LogHandler = LogToConsole;
+
+            ConsoleCommandRegistry.OnCacheLoaded += HandleCacheLoaded;
+            ConsoleCommandRegistry.LoadCache();
+
+            ConsoleCommandInvoker.LogHandler = LogToConsole;
+        }
+
+        private void HandleCacheLoaded(double ms)
+        {
+            int totalMethods = ConsoleCommandRegistry.Commands.Sum(kv => kv.Value.Count);
+            LogToConsole($"[DevConsole] Loaded {totalMethods} commands in {ms:F3} ms.");
+            ConsoleCommandRegistry.OnCacheLoaded -= HandleCacheLoaded;
         }
 
         private void OnEnable()
@@ -89,7 +92,7 @@ namespace NoSlimes.Util.DevCon
             {
                 if (string.IsNullOrWhiteSpace(cmd)) return;
 
-                invoker.Execute(cmd);
+                ConsoleCommandInvoker.Execute(cmd);
 
                 if (commandHistory.Count == 0 || commandHistory[^1] != cmd)
                     commandHistory.Add(cmd);
@@ -284,7 +287,7 @@ namespace NoSlimes.Util.DevCon
                 string argPrefix = parts.Length > 1 ? parts[1].ToLower() : "";
 
                 var matches = new List<string>();
-                foreach (var kv in registry.Commands.Keys)
+                foreach (var kv in ConsoleCommandRegistry.Commands.Keys)
                 {
                     if (string.IsNullOrEmpty(argPrefix) || kv.StartsWith(argPrefix, StringComparison.OrdinalIgnoreCase))
                         matches.Add(kv);
@@ -308,7 +311,7 @@ namespace NoSlimes.Util.DevCon
             }
 
             var commandMatches = new List<string>();
-            foreach (var kv in registry.Commands.Keys)
+            foreach (var kv in ConsoleCommandRegistry.Commands.Keys)
             {
                 if (kv.StartsWith(commandPrefix, StringComparison.OrdinalIgnoreCase))
                     commandMatches.Add(kv);
@@ -338,7 +341,7 @@ namespace NoSlimes.Util.DevCon
         [ConsoleCommand("help", "Shows a list of commands or details for one command.")]
         public static void HelpCommand(Action<string> response, string commandName = "")
         {
-            string output = _instance.invoker.GetHelp(commandName);
+            string output = ConsoleCommandInvoker.GetHelp(commandName);
             response(output);
         }
 
