@@ -118,6 +118,7 @@ namespace NoSlimes.Util.DevCon
                 if (_cache.ExcludeBuiltInCommands && type == typeof(BuiltInCommands))
                     continue;
 
+                // Get all methods with the given name
                 var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
                                   .Where(m => m.Name == entry.MethodName)
                                   .ToArray();
@@ -132,7 +133,12 @@ namespace NoSlimes.Util.DevCon
                 if (!_commands.ContainsKey(key))
                     _commands[key] = new List<MethodInfo>();
 
-                _commands[key].AddRange(methods);
+                // Add methods only if not already added
+                foreach (var method in methods)
+                {
+                    if (!_commands[key].Contains(method))
+                        _commands[key].Add(method);
+                }
             }
 
             stopwatch.Stop();

@@ -59,99 +59,105 @@ namespace NoSlimes.Util.DevCon
             string command = parts[0].ToLower();
             string[] args = parts.Skip(1).ToArray();
 
-            if (ConsoleCommandRegistry.Commands.TryGetValue(command, out var methodList))
+            if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out var methodList))
             {
-                MethodInfo matchedMethod = null;
-                object[] finalArgs = null;
+                LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>", false);
+                return;
+            }
 
-                foreach (var method in methodList)
+            MethodInfo matchedMethod = null;
+            object[] finalArgs = null;
+            int bestScore = int.MinValue;
+
+            foreach (var method in methodList)
+            {
+                var parameters = method.GetParameters();
+                int paramOffset = 0;
+
+                bool hasResponse = parameters.Length > 0 &&
+                    (parameters[0].ParameterType == typeof(Action<string>) ||
+                     parameters[0].ParameterType == typeof(Action<string, bool>));
+
+                if (hasResponse) paramOffset = 1;
+
+                if (args.Length > parameters.Length - paramOffset)
+                    continue; // too many arguments for this overload
+
+                var tempArgs = new object[parameters.Length];
+                if (hasResponse)
                 {
-                    var parameters = method.GetParameters();
-                    int paramOffset = 0;
+                    tempArgs[0] = parameters[0].ParameterType == typeof(Action<string, bool>)
+                        ? LogHandler
+                        : new Action<string>(msg => LogHandler(msg, true));
+                }
 
-                    bool hasResponse = parameters.Length > 0 &&
-                        (parameters[0].ParameterType == typeof(Action<string>) ||
-                         parameters[0].ParameterType == typeof(Action<string, bool>));
+                bool success = true;
+                int score = 0;
 
-                    if (hasResponse) paramOffset = 1;
-
-                    if (args.Length > parameters.Length - paramOffset)
-                        continue; // too many arguments for this overload
-
-                    var tempArgs = new object[parameters.Length];
-
-                    if (hasResponse)
+                for (int i = paramOffset; i < parameters.Length; i++)
+                {
+                    int argIndex = i - paramOffset;
+                    if (argIndex < args.Length)
                     {
-                        tempArgs[0] = parameters[0].ParameterType == typeof(Action<string, bool>)
-                            ? LogHandler
-                            : new Action<string>(msg => LogHandler(msg, true));
-                    }
+                        try
+                        {
+                            tempArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
 
-                    bool success = true;
-
-                    for (int i = paramOffset; i < parameters.Length; i++)
-                    {
-                        int argIndex = i - paramOffset;
-                        if (argIndex < args.Length)
-                        {
-                            try
-                            {
-                                tempArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
-                            }
-                            catch
-                            {
-                                success = false; // failed to convert, try next overload
-                                break;
-                            }
+                            // Exact type match scores higher
+                            if (parameters[i].ParameterType == tempArgs[i].GetType())
+                                score += 2;
+                            else
+                                score += 1;
                         }
-                        else if (parameters[i].HasDefaultValue)
+                        catch
                         {
-                            tempArgs[i] = parameters[i].DefaultValue;
-                        }
-                        else
-                        {
-                            success = false; // missing required argument
+                            success = false;
                             break;
                         }
                     }
-
-                    if (success)
+                    else if (parameters[i].HasDefaultValue)
                     {
-                        matchedMethod = method;
-                        finalArgs = tempArgs;
+                        tempArgs[i] = parameters[i].DefaultValue;
+                        score += 1;
+                    }
+                    else
+                    {
+                        success = false;
                         break;
                     }
                 }
 
-                if (matchedMethod == null)
+                if (success && score > bestScore)
                 {
-                    LogHandler($"<color=red>Error: No overload for '{command}' matches the provided arguments.</color>", false);
-                    return;
+                    bestScore = score;
+                    matchedMethod = method;
+                    finalArgs = tempArgs;
                 }
+            }
 
-                object target = matchedMethod.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(matchedMethod.DeclaringType);
-                if (target != null || matchedMethod.IsStatic)
+            if (matchedMethod == null)
+            {
+                LogHandler($"<color=red>Error: No overload for '{command}' matches the provided arguments.</color>", false);
+                return;
+            }
+
+            object target = matchedMethod.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(matchedMethod.DeclaringType);
+            if (target != null || matchedMethod.IsStatic)
+            {
+                try
                 {
-                    try
-                    {
-                        matchedMethod.Invoke(target, finalArgs);
-                    }
-                    catch (Exception e)
-                    {
-                        LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>", false);
-                    }
+                    matchedMethod.Invoke(target, finalArgs);
                 }
-                else
+                catch (Exception e)
                 {
-                    LogHandler($"<color=red>Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.</color>", false);
+                    LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>", false);
                 }
             }
             else
             {
-                LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>", false);
+                LogHandler($"<color=red>Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.</color>", false);
             }
         }
-
         public static string GetHelp(string commandName = "")
         {
             StringBuilder helpBuilder = new();
@@ -161,7 +167,10 @@ namespace NoSlimes.Util.DevCon
                 helpBuilder.AppendLine("Available Commands:");
                 foreach (var kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
                 {
-                    foreach (var method in kv.Value)
+                    var methods = kv.Value.Distinct().ToList();
+                    helpBuilder.AppendLine($"- {kv.Key} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")}):");
+
+                    foreach (var method in methods)
                     {
                         var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
                         var parameters = method.GetParameters();
@@ -175,7 +184,7 @@ namespace NoSlimes.Util.DevCon
                                     ? $"<{p.Name}={p.DefaultValue}>"
                                     : $"<{p.Name}>"));
 
-                        helpBuilder.AppendLine($"{attribute.Command} {argsInfo} - {attribute.Description}");
+                        helpBuilder.AppendLine($"    {attribute.Command} {argsInfo} - {attribute.Description}");
                     }
                 }
             }
@@ -184,7 +193,11 @@ namespace NoSlimes.Util.DevCon
                 string cmdName = commandName.ToLower();
                 if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var methodList))
                 {
-                    foreach (var method in methodList)
+                    var methods = methodList.Distinct().ToList();
+
+                    helpBuilder.AppendLine($"Command: {cmdName} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")})");
+
+                    foreach (var method in methods)
                     {
                         var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
                         var parameters = method.GetParameters();
@@ -198,9 +211,8 @@ namespace NoSlimes.Util.DevCon
                                     ? $"<{p.Name}={p.DefaultValue}>"
                                     : $"<{p.Name}>"));
 
-                        helpBuilder.AppendLine($"Command: {attribute.Command}");
-                        helpBuilder.AppendLine($"Description: {attribute.Description}");
-                        if (parameters.Length > 0) helpBuilder.AppendLine($"Arguments: {argsInfo}");
+                        helpBuilder.AppendLine($"  Description: {attribute.Description}");
+                        if (parameters.Length > 0) helpBuilder.AppendLine($"  Arguments: {argsInfo}");
                         helpBuilder.AppendLine(); // extra line between overloads
                     }
                 }
