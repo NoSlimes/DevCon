@@ -67,7 +67,18 @@ namespace NoSlimes.Util.DevCon
 
             _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
             if (_cache == null)
-                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/DevCon/ConsoleCommandCache'");
+            {
+                string folderPath = "Assets/Resources/DevCon";
+                if (!AssetDatabase.IsValidFolder("Assets/Resources"))
+                    AssetDatabase.CreateFolder("Assets", "Resources");
+                if (!AssetDatabase.IsValidFolder(folderPath))
+                    AssetDatabase.CreateFolder("Assets/Resources", "DevCon");
+
+                _cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
+                AssetDatabase.CreateAsset(_cache, folderPath + "/ConsoleCommandCache.asset");
+                AssetDatabase.SaveAssets();
+                _cache = AssetDatabase.LoadAssetAtPath<ConsoleCommandCache>(folderPath + "/ConsoleCommandCache.asset");
+            }
 
             _cache.Commands = methods.Select(m => new ConsoleCommandCache.CommandEntry
             {
