@@ -1,6 +1,6 @@
 {
   "name": "com.noslimes.devcon",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "displayName": "DevCon",
   "description": "An in-game console for entering and running commands",
   "unity": "2022.3",
