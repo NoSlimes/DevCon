@@ -6,19 +6,12 @@ using System.Text.RegularExpressions;
 
 namespace NoSlimes.Util.DevCon
 {
-    public class ConsoleCommandInvoker
+    public static class ConsoleCommandInvoker
     {
-        private readonly ConsoleCommandRegistry _registry;
-
         /// <summary>
         /// Where command responses and console feedback are routed.
         /// </summary>
-        public Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
-
-        public ConsoleCommandInvoker(ConsoleCommandRegistry registry)
-        {
-            _registry = registry;
-        }
+        public static Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
 
         // Regex that matches quoted strings OR non-space sequences
         private static readonly Regex ArgTokenizer = new Regex(
@@ -36,14 +29,25 @@ namespace NoSlimes.Util.DevCon
         private static object ConvertArg(string arg, Type targetType)
         {
             if (targetType == typeof(string)) return arg;
+
             if (targetType == typeof(int) && int.TryParse(arg, out var i)) return i;
+            if (targetType == typeof(double) && double.TryParse(arg, out var d)) return d;
+            if (targetType == typeof(long) && long.TryParse(arg, out var l)) return l;
+            if (targetType == typeof(short) && short.TryParse(arg, out var s)) return s;
+            if (targetType == typeof(byte) && byte.TryParse(arg, out var by)) return by;
+            if (targetType == typeof(decimal) && decimal.TryParse(arg, out var dec)) return dec;
+            if (targetType == typeof(uint) && uint.TryParse(arg, out var ui)) return ui;
+            if (targetType == typeof(ulong) && ulong.TryParse(arg, out var ul)) return ul;
+            if (targetType == typeof(ushort) && ushort.TryParse(arg, out var us)) return us;
+            if (targetType == typeof(sbyte) && sbyte.TryParse(arg, out var sb)) return sb;
+
             if (targetType == typeof(float) && float.TryParse(arg, out var f)) return f;
             if (targetType == typeof(bool) && bool.TryParse(arg, out var b)) return b;
             if (targetType.IsEnum && Enum.TryParse(targetType, arg, true, out var e)) return e;
             throw new ArgumentException($"Could not convert '{arg}' to {targetType.Name}");
         }
 
-        public void Execute(string input)
+        public static void Execute(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return;
 
@@ -55,69 +59,82 @@ namespace NoSlimes.Util.DevCon
             string command = parts[0].ToLower();
             string[] args = parts.Skip(1).ToArray();
 
-            if (_registry.Commands.TryGetValue(command, out var methodInfo))
+            if (ConsoleCommandRegistry.Commands.TryGetValue(command, out var methodList))
             {
-                var parameters = methodInfo.GetParameters();
-                object[] finalArgs = new object[parameters.Length];
+                MethodInfo matchedMethod = null;
+                object[] finalArgs = null;
 
-                bool hasResponse = parameters.Length > 0 &&
-                    (parameters[0].ParameterType == typeof(Action<string>) ||
-                     parameters[0].ParameterType == typeof(Action<string, bool>));
-
-                int paramOffset = hasResponse ? 1 : 0;
-
-                if (hasResponse)
+                foreach (var method in methodList)
                 {
-                    if (parameters[0].ParameterType == typeof(Action<string, bool>))
+                    var parameters = method.GetParameters();
+                    int paramOffset = 0;
+
+                    bool hasResponse = parameters.Length > 0 &&
+                        (parameters[0].ParameterType == typeof(Action<string>) ||
+                         parameters[0].ParameterType == typeof(Action<string, bool>));
+
+                    if (hasResponse) paramOffset = 1;
+
+                    if (args.Length > parameters.Length - paramOffset)
+                        continue; // too many arguments for this overload
+
+                    var tempArgs = new object[parameters.Length];
+
+                    if (hasResponse)
                     {
-                        finalArgs[0] = LogHandler;
+                        tempArgs[0] = parameters[0].ParameterType == typeof(Action<string, bool>)
+                            ? LogHandler
+                            : new Action<string>(msg => LogHandler(msg, true));
                     }
-                    else
+
+                    bool success = true;
+
+                    for (int i = paramOffset; i < parameters.Length; i++)
                     {
-                        finalArgs[0] = new Action<string>(msg => LogHandler(msg, true));
+                        int argIndex = i - paramOffset;
+                        if (argIndex < args.Length)
+                        {
+                            try
+                            {
+                                tempArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
+                            }
+                            catch
+                            {
+                                success = false; // failed to convert, try next overload
+                                break;
+                            }
+                        }
+                        else if (parameters[i].HasDefaultValue)
+                        {
+                            tempArgs[i] = parameters[i].DefaultValue;
+                        }
+                        else
+                        {
+                            success = false; // missing required argument
+                            break;
+                        }
+                    }
+
+                    if (success)
+                    {
+                        matchedMethod = method;
+                        finalArgs = tempArgs;
+                        break;
                     }
                 }
 
-                int expectedArgs = parameters.Length - paramOffset;
-                if (args.Length > expectedArgs)
+                if (matchedMethod == null)
                 {
-                    LogHandler($"<color=red>Error: Too many arguments for command '{command}'. Expected {expectedArgs}, got {args.Length}.</color>", false);
+                    LogHandler($"<color=red>Error: No overload for '{command}' matches the provided arguments.</color>", false);
                     return;
                 }
 
-                for (int i = paramOffset; i < parameters.Length; i++)
-                {
-                    int argIndex = i - paramOffset; 
-
-                    if (argIndex < args.Length)
-                    {
-                        try
-                        {
-                            finalArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
-                        }
-                        catch (Exception e)
-                        {
-                            LogHandler($"<color=red>Error: {e.Message}</color>", false);
-                            return;
-                        }
-                    }
-                    else
-                    {
-                        if (parameters[i].HasDefaultValue) finalArgs[i] = parameters[i].DefaultValue;
-                        else
-                        {
-                            LogHandler($"<color=red>Error: Missing required argument '{parameters[i].Name}'.</color>", false);
-                            return;
-                        }
-                    }
-                }
-
-                object target = methodInfo.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(methodInfo.DeclaringType);
-                if (target != null || methodInfo.IsStatic)
+                object target = matchedMethod.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(matchedMethod.DeclaringType);
+                if (target != null || matchedMethod.IsStatic)
                 {
                     try
                     {
-                        methodInfo.Invoke(target, finalArgs);
+                        matchedMethod.Invoke(target, finalArgs);
                     }
                     catch (Exception e)
                     {
@@ -126,7 +143,7 @@ namespace NoSlimes.Util.DevCon
                 }
                 else
                 {
-                    LogHandler($"<color=red>Error: Could not find instance of '{methodInfo.DeclaringType.Name}' for command '{command}'.</color>", false);
+                    LogHandler($"<color=red>Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.</color>", false);
                 }
             }
             else
@@ -135,50 +152,57 @@ namespace NoSlimes.Util.DevCon
             }
         }
 
-        public string GetHelp(string commandName = "")
+        public static string GetHelp(string commandName = "")
         {
             StringBuilder helpBuilder = new();
 
             if (string.IsNullOrEmpty(commandName))
             {
                 helpBuilder.AppendLine("Available Commands:");
-                foreach (var kv in _registry.Commands.OrderBy(c => c.Key))
+                foreach (var kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
                 {
-                    var attribute = kv.Value.GetCustomAttribute<ConsoleCommandAttribute>();
-                    var parameters = kv.Value.GetParameters();
+                    foreach (var method in kv.Value)
+                    {
+                        var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                        var parameters = method.GetParameters();
 
-                    string argsInfo = string.Join(" ", parameters
-                        .Where((p, index) => !(index == 0 &&
-                            (p.ParameterType == typeof(Action<string>) ||
-                             p.ParameterType == typeof(Action<string, bool>))))
-                        .Select(p =>
-                            p.HasDefaultValue
-                                ? $"<{p.Name}={p.DefaultValue}>"
-                                : $"<{p.Name}>"));
+                        string argsInfo = string.Join(" ", parameters
+                            .Where((p, index) => !(index == 0 &&
+                                (p.ParameterType == typeof(Action<string>) ||
+                                 p.ParameterType == typeof(Action<string, bool>))))
+                            .Select(p =>
+                                p.HasDefaultValue
+                                    ? $"<{p.Name}={p.DefaultValue}>"
+                                    : $"<{p.Name}>"));
 
-                    helpBuilder.AppendLine($"{attribute.Command} {argsInfo} - {attribute.Description}");
+                        helpBuilder.AppendLine($"{attribute.Command} {argsInfo} - {attribute.Description}");
+                    }
                 }
             }
             else
             {
                 string cmdName = commandName.ToLower();
-                if (_registry.Commands.TryGetValue(cmdName, out var method))
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var methodList))
                 {
-                    var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
-                    var parameters = method.GetParameters();
+                    foreach (var method in methodList)
+                    {
+                        var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                        var parameters = method.GetParameters();
 
-                    string argsInfo = string.Join(" ", parameters
-                        .Where((p, index) => !(index == 0 &&
-                            (p.ParameterType == typeof(Action<string>) ||
-                             p.ParameterType == typeof(Action<string, bool>))))
-                        .Select(p =>
-                            p.HasDefaultValue
-                                ? $"<{p.Name}={p.DefaultValue}>"
-                                : $"<{p.Name}>"));
+                        string argsInfo = string.Join(" ", parameters
+                            .Where((p, index) => !(index == 0 &&
+                                (p.ParameterType == typeof(Action<string>) ||
+                                 p.ParameterType == typeof(Action<string, bool>))))
+                            .Select(p =>
+                                p.HasDefaultValue
+                                    ? $"<{p.Name}={p.DefaultValue}>"
+                                    : $"<{p.Name}>"));
 
-                    helpBuilder.AppendLine($"Command: {attribute.Command}");
-                    helpBuilder.AppendLine($"Description: {attribute.Description}");
-                    if (parameters.Length > 0) helpBuilder.AppendLine($"Arguments: {argsInfo}");
+                        helpBuilder.AppendLine($"Command: {attribute.Command}");
+                        helpBuilder.AppendLine($"Description: {attribute.Description}");
+                        if (parameters.Length > 0) helpBuilder.AppendLine($"Arguments: {argsInfo}");
+                        helpBuilder.AppendLine(); // extra line between overloads
+                    }
                 }
                 else
                 {

@@ -2,26 +2,40 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using UnityEditor;
+using UnityEngine;
 
 namespace NoSlimes.Util.DevCon
 {
-    public class ConsoleCommandRegistry
+#if UNITY_EDITOR
+    [InitializeOnLoad]
+#endif
+    public static class ConsoleCommandRegistry
     {
-        private readonly Dictionary<string, MethodInfo> _commands = new();
+        private static ConsoleCommandCache _cache;
 
-        public IReadOnlyDictionary<string, MethodInfo> Commands => _commands;
+        private static readonly Dictionary<string, List<MethodInfo>> _commands = new();
+        public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
 
-        public void DiscoverCommands()
+        public static event Action<double> OnCacheLoaded;
+
+#if UNITY_EDITOR
+        static ConsoleCommandRegistry()
+        {
+            AssemblyReloadEvents.afterAssemblyReload += () =>
+            {
+                DiscoverCommandsEditor();
+            };
+        }
+
+        [MenuItem("Tools/DevCon/Manual Build Command Cache")]
+        public static void DiscoverCommandsEditor()
         {
             _commands.Clear();
 
             var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            //var methods = assemblies
-            //    .SelectMany(a => a.GetTypes())
-            //    .SelectMany(t => t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
-            //    .Where(m => m.IsDefined(typeof(ConsoleCommandAttribute), false));
-
             var methods = new List<MethodInfo>();
+
             foreach (var assembly in assemblies)
             {
                 Type[] types;
@@ -46,17 +60,60 @@ namespace NoSlimes.Util.DevCon
                 string commandName = attribute.Command.ToLower();
 
                 if (!_commands.ContainsKey(commandName))
-                {
-                    _commands.Add(commandName, method);
-                }
-                else
-                {
-                    var existingMethod = _commands[commandName];
-                    UnityEngine.Debug.LogWarning(
-                        $"[DeveloperConsole] Duplicate command '{commandName}' found in '{method.DeclaringType.Name}', keeping '{existingMethod.DeclaringType.Name}'."
-                    );
-                }
+                    _commands[commandName] = new List<MethodInfo>();
+
+                _commands[commandName].Add(method);
             }
+
+            _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
+            if (_cache == null)
+                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/DevCon/ConsoleCommandCache'");
+
+            _cache.Commands = methods.Select(m => new ConsoleCommandCache.CommandEntry
+            {
+                CommandName = m.GetCustomAttribute<ConsoleCommandAttribute>()?.Command ?? m.Name,
+                Description = m.GetCustomAttribute<ConsoleCommandAttribute>()?.Description ?? "",
+                DeclaringType = m.DeclaringType.AssemblyQualifiedName,
+                MethodName = m.Name,
+                ParameterTypes = m.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray()
+            }).ToArray();
+
+            EditorUtility.SetDirty(_cache);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            Debug.Log($"[DevConsole] Built command cache with {_cache.Commands.Length} entries.");
+        }
+#endif
+
+        public static void LoadCache()
+        {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
+            if (_cache == null)
+                throw new InvalidOperationException("ConsoleCommandCache asset not found at 'Resources/DevCon/ConsoleCommandCache'");
+
+            _commands.Clear();
+
+            foreach (var entry in _cache.Commands)
+            {
+                Type type = Type.GetType(entry.DeclaringType);
+
+                if (_cache.ExcludeBuiltInCommands && type.FullName == typeof(BuiltInCommands).FullName)
+                    continue;
+
+                MethodInfo method = type.GetMethod(entry.MethodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+
+                if (!_commands.ContainsKey(entry.CommandName.ToLower()))
+                    _commands[entry.CommandName.ToLower()] = new List<MethodInfo>();
+
+                _commands[entry.CommandName.ToLower()].Add(method);
+            }
+
+            stopwatch.Stop();
+            double elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+            OnCacheLoaded?.Invoke(elapsedMs);
         }
     }
 }
