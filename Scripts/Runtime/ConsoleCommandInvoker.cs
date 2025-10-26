@@ -3,6 +3,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using UnityEngine;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -141,7 +142,7 @@ namespace NoSlimes.Util.DevCon
                 return;
             }
 
-            object target = matchedMethod.IsStatic ? null : UnityEngine.Object.FindFirstObjectByType(matchedMethod.DeclaringType);
+            object target = ResolveTarget(matchedMethod);
             if (target != null || matchedMethod.IsStatic)
             {
                 try
@@ -158,6 +159,26 @@ namespace NoSlimes.Util.DevCon
                 LogHandler($"<color=red>Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.</color>", false);
             }
         }
+
+        private static object ResolveTarget(MethodInfo method)
+        {
+            if (method.IsStatic) return null;
+            var targetType = method.DeclaringType;
+
+            object targetInstance = null;
+
+            if (targetType.IsSubclassOf(typeof(UnityEngine.Object)))
+            {
+                targetInstance = UnityEngine.Object.FindFirstObjectByType(targetType);
+            }
+            else
+            {
+                LogHandler($"<color=red>Error: Non-static command methods must belong to a UnityEngine.Object subclass.</color>", false);
+            }
+
+            return targetInstance;
+        }
+
         public static string GetHelp(string commandName = "")
         {
             StringBuilder helpBuilder = new();
