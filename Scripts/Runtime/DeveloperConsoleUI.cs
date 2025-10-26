@@ -33,6 +33,7 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private bool dontDestroyOnLoad = true;
         [SerializeField] private bool catchUnityLogs = true;
         [SerializeField] private bool controlCursorLockMode = false;
+        [SerializeField] private char commandSeparator = '|';
 
         private readonly List<string> logHistory = new();
         private readonly List<string> commandHistory = new();
@@ -95,13 +96,22 @@ namespace NoSlimes.Util.DevCon
             {
                 if (string.IsNullOrWhiteSpace(cmd)) return;
 
-                ConsoleCommandInvoker.Execute(cmd);
+                string[] commands = cmd.Split(commandSeparator, StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var singleCommand in commands)
+                {
+                    string trimmedCommand = singleCommand.Trim();
+                    if (string.IsNullOrEmpty(trimmedCommand)) continue; 
+
+                    ConsoleCommandInvoker.Execute(trimmedCommand);
+                }
 
                 if (commandHistory.Count == 0 || commandHistory[^1] != cmd)
+                {
                     commandHistory.Add(cmd);
+                }
 
                 inputField.text = "";
-
                 commandHistoryIndex = -1;
                 FocusInputField();
             });
@@ -276,12 +286,31 @@ namespace NoSlimes.Util.DevCon
 
         private void AutoComplete()
         {
-            string currentText = inputField.text;
-            if (string.IsNullOrWhiteSpace(currentText)) return;
+            string fullInput = inputField.text;
+            if (string.IsNullOrWhiteSpace(fullInput)) return;
 
-            string[] parts = currentText.Split(' ');
+            string commandPrefix = ""; 
+            string activeCommand;      
+
+            int lastSeparatorIndex = fullInput.LastIndexOf(commandSeparator);
+
+            if (lastSeparatorIndex != -1)
+            {
+                commandPrefix = fullInput.Substring(0, lastSeparatorIndex + 1);
+                activeCommand = fullInput.Substring(lastSeparatorIndex + 1);
+            }
+            else
+            {
+                commandPrefix = "";
+                activeCommand = fullInput;
+            }
+
+            string trimmedActiveCommand = activeCommand.TrimStart();
+            if (string.IsNullOrEmpty(trimmedActiveCommand)) return;
+
+            string[] parts = trimmedActiveCommand.Split(' ');
             bool isHelpArg = parts.Length > 1 && parts[0].ToLower() == "help";
-            string typedPrefix = isHelpArg ? parts[1] : parts[0];
+            string typedPrefix = isHelpArg ? (parts.Length > 1 ? parts[1] : "") : parts[0];
 
             if (typedPrefix != lastTypedPrefix)
             {
@@ -301,9 +330,12 @@ namespace NoSlimes.Util.DevCon
                     if (isHelpArg) parts[1] = currentMatches[0];
                     else parts[0] = currentMatches[0];
 
-                    inputField.text = string.Join(" ", parts);
-                    lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
+                    string completedSegment = string.Join(" ", parts);
 
+                    string leadingWhitespace = activeCommand.Substring(0, activeCommand.Length - trimmedActiveCommand.Length);
+                    inputField.text = commandPrefix + leadingWhitespace + completedSegment;
+
+                    lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
                     StartCoroutine(MoveCaretToEndCoroutine());
                     return;
                 }
@@ -322,9 +354,12 @@ namespace NoSlimes.Util.DevCon
             if (isHelpArg) parts[1] = currentMatches[autoCompleteIndex];
             else parts[0] = currentMatches[autoCompleteIndex];
 
-            inputField.text = string.Join(" ", parts);
-            lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
+            string cycledSegment = string.Join(" ", parts);
 
+            string leadingWhitespaceCycle = activeCommand.Substring(0, activeCommand.Length - trimmedActiveCommand.Length);
+            inputField.text = commandPrefix + leadingWhitespaceCycle + cycledSegment;
+
+            lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
             StartCoroutine(MoveCaretToEndCoroutine());
         }
 

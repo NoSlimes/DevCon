@@ -21,6 +21,8 @@ namespace NoSlimes.Util.DevCon
         private SerializedProperty dontDestroyOnLoadProp;
         private SerializedProperty catchUnityLogsProp;
         private SerializedProperty controlCursorLockModeProp;
+        private SerializedProperty commandSeparatorProp;
+
         private void OnEnable()
         {
 #if ENABLE_INPUT_SYSTEM
@@ -41,6 +43,7 @@ namespace NoSlimes.Util.DevCon
             dontDestroyOnLoadProp = serializedObject.FindProperty("dontDestroyOnLoad");
             catchUnityLogsProp = serializedObject.FindProperty("catchUnityLogs");
             controlCursorLockModeProp = serializedObject.FindProperty("controlCursorLockMode");
+            commandSeparatorProp = serializedObject.FindProperty("commandSeparator");
         }
 
         public override void OnInspectorGUI()
@@ -71,6 +74,8 @@ namespace NoSlimes.Util.DevCon
             EditorGUILayout.PropertyField(autoCompleteKeyProp);
             EditorGUILayout.HelpBox("The new Input System package is not enabled. Please enable it in Project Settings to use new input features.", MessageType.Info);
 #endif
+
+            EditorGUILayout.PropertyField(commandSeparatorProp);
 
             EditorGUILayout.Space(10);
 
