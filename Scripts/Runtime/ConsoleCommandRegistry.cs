@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Assertions;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -48,6 +49,9 @@ namespace NoSlimes.Util.DevCon
                     {
                         if (m.IsDefined(typeof(ConsoleCommandAttribute), false))
                         {
+                            Assert.IsTrue(m.IsStatic || t.IsSubclassOf(typeof(UnityEngine.Object)), 
+                                $"Non-static command '{m.Name}' is in class '{t.Name}' which does not inherit from UnityEngine.Object. Command methods in standard C# classes must be static. \n Aborting command discovery.");
+
                             methods.Add(m);
                         }
                     }
