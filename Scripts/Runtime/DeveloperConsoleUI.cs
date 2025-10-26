@@ -5,7 +5,6 @@ using UnityEngine.UI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using UnityEngine.EventSystems;
 using System.Linq;
 
 namespace NoSlimes.Util.DevCon
@@ -39,6 +38,10 @@ namespace NoSlimes.Util.DevCon
         private readonly List<string> commandHistory = new();
         private int commandHistoryIndex = -1;
         private CursorLockMode originalCursorLockMode;
+
+        private string lastTypedPrefix = "";
+        private List<string> currentMatches = new List<string>();
+        private int autoCompleteIndex = -1;
 
         public static event Action<bool> OnConsoleToggled;
 
@@ -265,8 +268,6 @@ namespace NoSlimes.Util.DevCon
             StartCoroutine(MoveCaretToEndCoroutine());
         }
 
-
-
         private IEnumerator MoveCaretToEndCoroutine()
         {
             yield return new WaitForEndOfFrame();
@@ -276,62 +277,56 @@ namespace NoSlimes.Util.DevCon
         private void AutoComplete()
         {
             string currentText = inputField.text;
-            if (string.IsNullOrWhiteSpace(currentText))
-                return;
+            if (string.IsNullOrWhiteSpace(currentText)) return;
 
             string[] parts = currentText.Split(' ');
-            string commandPrefix = parts[0].ToLower();
+            bool isHelpArg = parts.Length > 1 && parts[0].ToLower() == "help";
+            string typedPrefix = isHelpArg ? parts[1] : parts[0];
 
-            if (commandPrefix == "help")
+            if (typedPrefix != lastTypedPrefix)
             {
-                string argPrefix = parts.Length > 1 ? parts[1].ToLower() : "";
+                lastTypedPrefix = typedPrefix;
+                autoCompleteIndex = -1;
 
-                var matches = new List<string>();
-                foreach (var kv in ConsoleCommandRegistry.Commands.Keys)
+                currentMatches = ConsoleCommandRegistry.Commands.Keys
+                    .Where(k => k.StartsWith(typedPrefix, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (currentMatches.Count > 1)
                 {
-                    if (string.IsNullOrEmpty(argPrefix) || kv.StartsWith(argPrefix, StringComparison.OrdinalIgnoreCase))
-                        matches.Add(kv);
+                    LogToConsole((isHelpArg ? "Help matches: " : "Matches: ") + string.Join(", ", currentMatches));
                 }
-
-                if (matches.Count == 0)
-                    return;
-
-                if (matches.Count == 1)
+                else if (currentMatches.Count == 1)
                 {
-                    parts = new string[] { "help", matches[0] };
+                    if (isHelpArg) parts[1] = currentMatches[0];
+                    else parts[0] = currentMatches[0];
+
                     inputField.text = string.Join(" ", parts);
+                    lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
+
                     StartCoroutine(MoveCaretToEndCoroutine());
+                    return;
                 }
                 else
                 {
-                    LogToConsole("Help matches: " + string.Join(", ", matches));
+                    currentMatches.Clear();
                 }
 
-                return;
+                return; 
             }
 
-            var commandMatches = new List<string>();
-            foreach (var kv in ConsoleCommandRegistry.Commands.Keys)
-            {
-                if (kv.StartsWith(commandPrefix, StringComparison.OrdinalIgnoreCase))
-                    commandMatches.Add(kv);
-            }
+            if (currentMatches.Count == 0) return;
 
-            if (commandMatches.Count == 0)
-                return;
+            autoCompleteIndex = (autoCompleteIndex + 1) % currentMatches.Count;
 
-            if (commandMatches.Count == 1)
-            {
-                parts[0] = commandMatches[0];
-                inputField.text = string.Join(" ", parts);
-                StartCoroutine(MoveCaretToEndCoroutine());
-            }
-            else
-            {
-                LogToConsole("Matches: " + string.Join(", ", commandMatches));
-            }
+            if (isHelpArg) parts[1] = currentMatches[autoCompleteIndex];
+            else parts[0] = currentMatches[autoCompleteIndex];
+
+            inputField.text = string.Join(" ", parts);
+            lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
+
+            StartCoroutine(MoveCaretToEndCoroutine());
         }
-
 
 #if ENABLE_INPUT_SYSTEM
         private void OnToggleConsoleAction(InputAction.CallbackContext context) => ToggleConsole();
