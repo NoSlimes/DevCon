@@ -2,9 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using UnityEditor;
 using UnityEngine;
-using UnityEngine.Assertions;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace NoSlimes.Util.DevCon
 {
@@ -32,9 +33,21 @@ namespace NoSlimes.Util.DevCon
         [MenuItem("Tools/DevCon/Manual Build Command Cache")]
         public static void DiscoverCommandsEditor()
         {
-            _commands.Clear();
+            DiscoverCommands(AppDomain.CurrentDomain.GetAssemblies());
+        }
+#endif
 
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+        /// <summary>
+        /// Discovers console commands in the specified assemblies.
+        /// Can be called at runtime or in the editor.
+        /// </summary>
+        /// <param name="assemblies">Assemblies to search. If null, searches all loaded assemblies.</param>
+        internal static void DiscoverCommands(IEnumerable<Assembly> assemblies = null, bool overwrite = true)
+        {
+            if(overwrite)
+                _commands.Clear();
+
+            assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
             var methods = new List<MethodInfo>();
 
             foreach (var assembly in assemblies)
@@ -49,8 +62,13 @@ namespace NoSlimes.Util.DevCon
                     {
                         if (m.IsDefined(typeof(ConsoleCommandAttribute), false))
                         {
-                            Assert.IsTrue(m.IsStatic || t.IsSubclassOf(typeof(UnityEngine.Object)), 
-                                $"Non-static command '{m.Name}' is in class '{t.Name}' which does not inherit from UnityEngine.Object. Command methods in standard C# classes must be static. \n Aborting command discovery.");
+                            if (!m.IsStatic && !t.IsSubclassOf(typeof(UnityEngine.Object)))
+                            {
+                                Debug.LogError(
+                                    $"Non-static command '{m.Name}' is in class '{t.Name}' which does not inherit from UnityEngine.Object. " +
+                                    $"Command methods in standard C# classes must be static. Skipping.");
+                                continue;
+                            }
 
                             methods.Add(m);
                         }
@@ -69,6 +87,8 @@ namespace NoSlimes.Util.DevCon
                 _commands[commandName].Add(method);
             }
 
+#if UNITY_EDITOR
+            // Update ScriptableObject cache in editor
             _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
             if (_cache == null)
             {
@@ -80,8 +100,6 @@ namespace NoSlimes.Util.DevCon
 
                 _cache = ScriptableObject.CreateInstance<ConsoleCommandCache>();
                 AssetDatabase.CreateAsset(_cache, folderPath + "/ConsoleCommandCache.asset");
-                AssetDatabase.SaveAssets();
-                _cache = AssetDatabase.LoadAssetAtPath<ConsoleCommandCache>(folderPath + "/ConsoleCommandCache.asset");
             }
 
             _cache.Commands = methods.Select(m => new ConsoleCommandCache.CommandEntry
@@ -98,8 +116,14 @@ namespace NoSlimes.Util.DevCon
             AssetDatabase.Refresh();
 
             Debug.Log($"[DevConsole] Built command cache with {_cache.Commands.Length} entries.");
-        }
 #endif
+        }
+
+        public static void DiscoverCommandsInAssembly(Assembly assembly)
+        {
+            DiscoverCommands(new[] { assembly }, false);
+        }
+
         public static void LoadCache()
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -122,7 +146,6 @@ namespace NoSlimes.Util.DevCon
                 if (_cache.ExcludeBuiltInCommands && type == typeof(BuiltInCommands))
                     continue;
 
-                // Get all methods with the given name
                 var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
                                   .Where(m => m.Name == entry.MethodName)
                                   .ToArray();
@@ -137,7 +160,6 @@ namespace NoSlimes.Util.DevCon
                 if (!_commands.ContainsKey(key))
                     _commands[key] = new List<MethodInfo>();
 
-                // Add methods only if not already added
                 foreach (var method in methods)
                 {
                     if (!_commands[key].Contains(method))
@@ -146,8 +168,7 @@ namespace NoSlimes.Util.DevCon
             }
 
             stopwatch.Stop();
-            double elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
-            OnCacheLoaded?.Invoke(elapsedMs);
+            OnCacheLoaded?.Invoke(stopwatch.Elapsed.TotalMilliseconds);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -7,7 +8,71 @@ using UnityEngine;
 
 namespace NoSlimes.Util.DevCon
 {
-    public static class ConsoleCommandInvoker
+    public static partial class ConsoleCommandInvoker
+    {
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void InitOnPlay()
+        {
+            _ = typeof(ConsoleCommandInvoker); // forces the static constructor to run
+        }
+
+        static ConsoleCommandInvoker()
+        {
+
+            RegisterArgConverter<Vector3>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 3)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector3).Name}");
+
+                return new Vector3(
+                    float.Parse(parts[0]),
+                    float.Parse(parts[1]),
+                    float.Parse(parts[2])
+                );
+            });
+
+            RegisterArgConverter<Vector2>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 2)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector2).Name}");
+                return new Vector2(
+                    float.Parse(parts[0]),
+                    float.Parse(parts[1])
+                );
+            });
+
+            RegisterArgConverter<Color>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 4)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Color).Name}");
+                return new Color(
+                    float.Parse(parts[0]),
+                    float.Parse(parts[1]),
+                    float.Parse(parts[2]),
+                    float.Parse(parts[3])
+                );
+            });
+
+            RegisterArgConverter<Quaternion>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 4)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Quaternion).Name}");
+                return new Quaternion(
+                    float.Parse(parts[0]),
+                    float.Parse(parts[1]),
+                    float.Parse(parts[2]),
+                    float.Parse(parts[3])
+                );
+            });
+        }
+    }
+
+    public static partial class ConsoleCommandInvoker
     {
         /// <summary>
         /// Where command responses and console feedback are routed.
@@ -15,10 +80,17 @@ namespace NoSlimes.Util.DevCon
         public static Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
 
         // Regex that matches quoted strings OR non-space sequences
-        private static readonly Regex ArgTokenizer = new Regex(
+        private static readonly Regex ArgTokenizer = new(
             @"[\""].+?[\""]|[^ ]+",
             RegexOptions.Compiled
         );
+
+        private static readonly Dictionary<Type, Func<string, object>> ArgConverters = new();
+
+        public static void RegisterArgConverter<T>(Func<string, T> converter)
+        {
+            ArgConverters[typeof(T)] = arg => converter(arg);
+        }
 
         private static string[] Tokenize(string input)
         {
@@ -30,6 +102,10 @@ namespace NoSlimes.Util.DevCon
         private static object ConvertArg(string arg, Type targetType)
         {
             if (targetType == typeof(string)) return arg;
+
+            var typeToUse = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            if (ArgConverters.TryGetValue(typeToUse, out var converter))
+                return converter(arg);
 
             if (targetType == typeof(int) && int.TryParse(arg, out var i)) return i;
             if (targetType == typeof(double) && double.TryParse(arg, out var d)) return d;
