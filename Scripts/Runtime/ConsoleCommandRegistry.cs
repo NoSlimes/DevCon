@@ -24,10 +24,18 @@ namespace NoSlimes.Util.DevCon
 #if UNITY_EDITOR
         static ConsoleCommandRegistry()
         {
-            AssemblyReloadEvents.afterAssemblyReload += () =>
+            AssemblyReloadEvents.afterAssemblyReload += AfterAssemblyReload;
+        }
+
+        private static void AfterAssemblyReload()
+        {
+            static void callback()
             {
                 DiscoverCommandsEditor();
-            };
+                EditorApplication.delayCall -= callback;
+            }
+
+            EditorApplication.delayCall += callback; 
         }
 
         [MenuItem("Tools/DevCon/Manual Build Command Cache")]
