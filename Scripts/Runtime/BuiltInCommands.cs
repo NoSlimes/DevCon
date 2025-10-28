@@ -165,13 +165,6 @@ namespace NoSlimes.Util.DevCon
             else response("<color=yellow>No main camera found.</color>");
         }
 
-        [ConsoleCommand("toggleWireframe", "Toggles wireframe rendering.")]
-        public static void ToggleWireframeCommand(Action<string> response, bool enabled)
-        {
-            GL.wireframe = enabled;
-            response($"Wireframe mode: {enabled}");
-        }
-
         [ConsoleCommand("screenshot", "Takes a screenshot and saves it.")]
         public static void ScreenshotCommand(Action<string> response, string filename = "screenshot.png")
         {
