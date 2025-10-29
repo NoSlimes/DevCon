@@ -98,15 +98,16 @@ namespace NoSlimes.Util.DevCon
             var so = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
             if (so != null)
             {
-                bool newValue = EditorGUILayout.Toggle("Exclude Built-In Commands from Cache", so.ExcludeBuiltInCommands);
+                bool newValue = EditorGUILayout.Toggle("Exclude Built-In Commands from Cache", EditorPrefs.GetBool("DevCon_ExcludeBuiltInCommands", false));
 
                 if (newValue != so.ExcludeBuiltInCommands)
                 {
-                    so.ExcludeBuiltInCommands = newValue;   
-                    lastExcludeBuiltinValue = newValue;   
+                    so.ExcludeBuiltInCommands = newValue;
+                    lastExcludeBuiltinValue = newValue;
 
-                    EditorUtility.SetDirty(so);          
-                    AssetDatabase.SaveAssets();           
+                    EditorPrefs.SetBool("DevCon_ExcludeBuiltInCommands", newValue);
+                    EditorUtility.SetDirty(so);
+                    AssetDatabase.SaveAssets();
                 }
             }
 

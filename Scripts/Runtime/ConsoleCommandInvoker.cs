@@ -33,6 +33,19 @@ namespace NoSlimes.Util.DevCon
                 );
             });
 
+            RegisterArgConverter<Vector3Int>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 3)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector3Int).Name}");
+
+                return new Vector3Int(
+                    int.Parse(parts[0]),
+                    int.Parse(parts[1]),
+                    int.Parse(parts[2])
+                );
+            });
+
             RegisterArgConverter<Vector2>(static arg =>
             {
                 var parts = arg.Trim('(', ')').Split(',');
@@ -41,6 +54,17 @@ namespace NoSlimes.Util.DevCon
                 return new Vector2(
                     float.Parse(parts[0]),
                     float.Parse(parts[1])
+                );
+            });
+
+            RegisterArgConverter<Vector2Int>(static arg =>
+            {
+                var parts = arg.Trim('(', ')').Split(',');
+                if (parts.Length != 2)
+                    throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector2Int).Name}");
+                return new Vector2Int(
+                    int.Parse(parts[0]),
+                    int.Parse(parts[1])
                 );
             });
 
