@@ -103,6 +103,13 @@ namespace NoSlimes.Util.DevCon
         /// </summary>
         public static Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
 
+        /// <summary>
+        /// Indicates whether cheat commands are currently allowed to execute.
+        /// Commands marked with the <see cref="CommandFlags.Cheat"/> flag
+        /// will only run if this property is <c>true</c>.
+        /// </summary>
+        public static bool CheatsEnabled { get; set; } = false;
+
         // Regex that matches quoted strings OR non-space sequences
         private static readonly Regex ArgTokenizer = new(
             @"[\""].+?[\""]|[^ ]+",
@@ -247,6 +254,13 @@ namespace NoSlimes.Util.DevCon
             {
                 try
                 {
+                    var attr = matchedMethod.GetCustomAttribute<ConsoleCommandAttribute>();
+                    if (attr.Flags.HasFlag(CommandFlags.Cheat) && !CheatsEnabled)
+                    {
+                        LogHandler($"Cheat command '{attr.Command}' could not be executed, as cheats is not enabled.", false);
+                        return;
+                    }
+
                     matchedMethod.Invoke(target, finalArgs);
                 }
                 catch (Exception e)
@@ -294,6 +308,11 @@ namespace NoSlimes.Util.DevCon
                     foreach (var method in methods)
                     {
                         var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+
+                        // Skip hidden commands in general help listing
+                        if (attribute.Flags.HasFlag(CommandFlags.Hidden))
+                            continue;
+
                         var parameters = method.GetParameters();
 
                         string argsInfo = string.Join(" ", parameters

@@ -1,13 +1,11 @@
 using UnityEditor;
 using UnityEngine;
 
-namespace NoSlimes.Util.DevCon
+namespace NoSlimes.Util.DevCon.Editor
 {
     [CustomEditor(typeof(DeveloperConsoleUI))]
     public class DeveloperConsoleEditor : UnityEditor.Editor
     {
-        private bool lastExcludeBuiltinValue;
-
         private SerializedProperty inputSystemProp;
         private SerializedProperty toggleConsoleActionProp;
         private SerializedProperty autoCompleteActionProp;
@@ -94,23 +92,6 @@ namespace NoSlimes.Util.DevCon
             EditorGUILayout.PropertyField(controlCursorLockModeProp);
 
             EditorGUILayout.Space(10);
-
-            var so = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
-            if (so != null)
-            {
-                bool newValue = EditorGUILayout.Toggle("Exclude Built-In Commands from Cache", EditorPrefs.GetBool("DevCon_ExcludeBuiltInCommands", false));
-
-                if (newValue != so.ExcludeBuiltInCommands)
-                {
-                    so.ExcludeBuiltInCommands = newValue;
-                    lastExcludeBuiltinValue = newValue;
-
-                    EditorPrefs.SetBool("DevCon_ExcludeBuiltInCommands", newValue);
-                    EditorUtility.SetDirty(so);
-                    AssetDatabase.SaveAssets();
-                }
-            }
-
 
             serializedObject.ApplyModifiedProperties();
         }

@@ -9,7 +9,7 @@ namespace NoSlimes.Util.DevCon
 {
     public class ConsoleCommandCache : ScriptableObject
     {
-        public bool ExcludeBuiltInCommands = false;
+        [HideInInspector] public bool ExcludeBuiltInCommands = false;
         public CommandEntry[] Commands;
 
         private void OnEnable()
@@ -24,6 +24,7 @@ namespace NoSlimes.Util.DevCon
         {
             public string CommandName;
             public string Description;
+            public CommandFlags Flags;
             public string DeclaringType;
             public string MethodName;
             public string[] ParameterTypes;
