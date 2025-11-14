@@ -112,9 +112,40 @@ Each command runs sequentially, and errors in one command do not prevent subsequ
 
 ---
 
-### 5. Auto-completion
+### 5. Command Flags
 
-* DevCon supports tab-based auto-completion for commands and their arguments.
-* Partial command names are matched case-insensitively.
+Commands can include **flags** to control when and how they are available. Flags are optional and can be combined using the bitwise OR operator (`|`).
+
+| Flag | Description |
+|------|-------------|
+| `None` | No special behavior. Command is always available. |
+| `DebugOnly` | Command is only available in debug builds. Cannot be combined with `EditorOnly`. |
+| `EditorOnly` | Command is only available in the Unity editor. Cannot be combined with `DebugOnly`. |
+| `Cheat` | Marks the command as a cheat. Only runs if `CheatsEnabled` is `true`. |
+| `Mod` | Command is added by a mod or external plugin. |
+| `Hidden` | Command is hidden from help listings, but can still be invoked. |
+
+**Cheat Commands Note:**
+
+* DevCon includes a built-in `enablecheats` command to toggle cheat commands globally.  
+* Alternatively, you can disable the built-in command and provide your own mechanism for enabling cheats by setting `ConsoleCommandInvoker.CheatsEnabled` manually.  
+* Commands with the `Cheat` flag will only run if `CheatsEnabled` is `true`.
+
+**Example:**
+
+```csharp
+[ConsoleCommand("godMode", "Enables invincibility.", CommandFlags.Cheat | CommandFlags.DebugOnly)]
+public static void GodModeCommand(Action<string> response)
+{
+    Player.Instance.Invincible = true;
+    response("God mode enabled!", true);
+}
+```
+---
+
+### 6. Auto-completion
+
+* DevCon supports tab-based auto-completion for commands.
+* Command names are matched case-insensitively.
 
 ---
