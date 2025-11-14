@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using Codice.CM.Common;
 using UnityEngine;
 
 namespace NoSlimes.Util.DevCon
@@ -22,7 +23,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Vector3>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 3)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector3).Name}");
 
@@ -35,7 +36,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Vector3Int>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 3)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector3Int).Name}");
 
@@ -48,7 +49,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Vector2>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 2)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector2).Name}");
                 return new Vector2(
@@ -59,7 +60,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Vector2Int>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 2)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Vector2Int).Name}");
                 return new Vector2Int(
@@ -70,7 +71,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Color>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 4)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Color).Name}");
                 return new Color(
@@ -83,7 +84,7 @@ namespace NoSlimes.Util.DevCon
 
             RegisterArgConverter<Quaternion>(static arg =>
             {
-                var parts = arg.Trim('(', ')').Split(',');
+                string[] parts = arg.Trim('(', ')').Split(',');
                 if (parts.Length != 4)
                     throw new ArgumentException($"Could not convert '{arg}' to {typeof(Quaternion).Name}");
                 return new Quaternion(
@@ -101,7 +102,7 @@ namespace NoSlimes.Util.DevCon
         /// <summary>
         /// Where command responses and console feedback are routed.
         /// </summary>
-        public static Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
+        internal static Action<string, bool> LogHandler { get; set; } = (msg, success) => { };
 
         /// <summary>
         /// Indicates whether cheat commands are currently allowed to execute.
@@ -138,24 +139,24 @@ namespace NoSlimes.Util.DevCon
             if (ArgConverters.TryGetValue(typeToUse, out var converter))
                 return converter(arg);
 
-            if (targetType == typeof(int) && int.TryParse(arg, out var i)) return i;
-            if (targetType == typeof(double) && double.TryParse(arg, out var d)) return d;
-            if (targetType == typeof(long) && long.TryParse(arg, out var l)) return l;
-            if (targetType == typeof(short) && short.TryParse(arg, out var s)) return s;
-            if (targetType == typeof(byte) && byte.TryParse(arg, out var by)) return by;
-            if (targetType == typeof(decimal) && decimal.TryParse(arg, out var dec)) return dec;
-            if (targetType == typeof(uint) && uint.TryParse(arg, out var ui)) return ui;
-            if (targetType == typeof(ulong) && ulong.TryParse(arg, out var ul)) return ul;
-            if (targetType == typeof(ushort) && ushort.TryParse(arg, out var us)) return us;
-            if (targetType == typeof(sbyte) && sbyte.TryParse(arg, out var sb)) return sb;
+            if (targetType == typeof(int) && int.TryParse(arg, out int i)) return i;
+            if (targetType == typeof(double) && double.TryParse(arg, out double d)) return d;
+            if (targetType == typeof(long) && long.TryParse(arg, out long l)) return l;
+            if (targetType == typeof(short) && short.TryParse(arg, out short s)) return s;
+            if (targetType == typeof(byte) && byte.TryParse(arg, out byte by)) return by;
+            if (targetType == typeof(decimal) && decimal.TryParse(arg, out decimal dec)) return dec;
+            if (targetType == typeof(uint) && uint.TryParse(arg, out uint ui)) return ui;
+            if (targetType == typeof(ulong) && ulong.TryParse(arg, out ulong ul)) return ul;
+            if (targetType == typeof(ushort) && ushort.TryParse(arg, out ushort us)) return us;
+            if (targetType == typeof(sbyte) && sbyte.TryParse(arg, out sbyte sb)) return sb;
 
-            if (targetType == typeof(float) && float.TryParse(arg, out var f)) return f;
-            if (targetType == typeof(bool) && bool.TryParse(arg, out var b)) return b;
-            if (targetType.IsEnum && Enum.TryParse(targetType, arg, true, out var e)) return e;
+            if (targetType == typeof(float) && float.TryParse(arg, out float f)) return f;
+            if (targetType == typeof(bool) && bool.TryParse(arg, out bool b)) return b;
+            if (targetType.IsEnum && Enum.TryParse(targetType, arg, true, out object e)) return e;
             throw new ArgumentException($"Could not convert '{arg}' to {targetType.Name}");
         }
 
-        public static void Execute(string input)
+        internal static void Execute(string input)
         {
             if (string.IsNullOrWhiteSpace(input)) return;
 
@@ -191,7 +192,7 @@ namespace NoSlimes.Util.DevCon
                 if (args.Length > parameters.Length - paramOffset)
                     continue; // too many arguments for this overload
 
-                var tempArgs = new object[parameters.Length];
+                object[] tempArgs = new object[parameters.Length];
                 if (hasResponse)
                 {
                     tempArgs[0] = parameters[0].ParameterType == typeof(Action<string, bool>)
@@ -255,11 +256,21 @@ namespace NoSlimes.Util.DevCon
                 try
                 {
                     var attr = matchedMethod.GetCustomAttribute<ConsoleCommandAttribute>();
-                    if (attr.Flags.HasFlag(CommandFlags.Cheat) && !CheatsEnabled)
+
+                    bool BlockLocal(string reason)
                     {
-                        LogHandler($"Cheat command '{attr.Command}' could not be executed, as cheats is not enabled.", false);
-                        return;
+                        LogHandler($"Cannot run '{attr.Command}': {reason}.", false);
+                        return true;
                     }
+
+                    if (attr.Flags.HasFlag(CommandFlags.Cheat) && !CheatsEnabled &&
+                        BlockLocal("cheats are disabled")) return;
+
+                    if (attr.Flags.HasFlag(CommandFlags.DebugOnly) && !Debug.isDebugBuild &&
+                        BlockLocal("debug-only commands are not allowed in this build")) return;
+
+                    if (attr.Flags.HasFlag(CommandFlags.EditorOnly) && !Application.isEditor &&
+                        BlockLocal("editor-only commands are not allowed in builds")) return;
 
                     matchedMethod.Invoke(target, finalArgs);
                 }

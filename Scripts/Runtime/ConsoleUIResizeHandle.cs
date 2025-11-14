@@ -3,7 +3,7 @@ using UnityEngine.EventSystems;
 
 namespace NoSlimes.Util.DevCon
 {
-    public class ConsoleUIResizeHandle : MonoBehaviour, IBeginDragHandler, IDragHandler
+    internal class ConsoleUIResizeHandle : MonoBehaviour, IBeginDragHandler, IDragHandler
     {
         [SerializeField] private RectTransform targetPanel;
         [SerializeField] private float minHeight = 100f;

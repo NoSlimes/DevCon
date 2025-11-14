@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace NoSlimes.Util.DevCon
 {
-    public static class BuiltInCommands
+    internal static class BuiltInCommands
     {
+#if DEVCON_BUILTIN
         #region Application
 
         [ConsoleCommand("quit", "Quits the application.")]
@@ -56,7 +59,7 @@ namespace NoSlimes.Util.DevCon
         [ConsoleCommand("reloadScene", "Reloads the current scene.")]
         public static void ReloadSceneCommand(Action<string> response)
         {
-            var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            Scene scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             response($"Reloading scene: {scene.name}");
             UnityEngine.SceneManagement.SceneManager.LoadScene(scene.buildIndex);
         }
@@ -71,7 +74,7 @@ namespace NoSlimes.Util.DevCon
         [ConsoleCommand("listScenes", "Lists all scenes in the build settings.")]
         public static void ListScenesCommand(Action<string> response)
         {
-            var scenes = Enumerable
+            IEnumerable<string> scenes = Enumerable
                 .Range(0, UnityEngine.SceneManagement.SceneManager.sceneCountInBuildSettings)
                 .Select(i => System.IO.Path.GetFileNameWithoutExtension(UnityEngine.SceneManagement.SceneUtility.GetScenePathByBuildIndex(i)));
 
@@ -139,7 +142,7 @@ namespace NoSlimes.Util.DevCon
         [ConsoleCommand("resolutions", "Lists supported screen resolutions.")]
         public static void ResolutionsCommand(Action<string> response)
         {
-            var resolutions = Screen.resolutions.Select(r => $"{r.width}x{r.height}@{r.refreshRateRatio}Hz");
+            IEnumerable<string> resolutions = Screen.resolutions.Select(r => $"{r.width}x{r.height}@{r.refreshRateRatio}Hz");
             response("Supported resolutions:\n" + string.Join("\n", resolutions));
         }
 
@@ -219,5 +222,17 @@ namespace NoSlimes.Util.DevCon
         }
 
         #endregion
+#endif
+
+#if DEVCON_ENABLECHEATS
+        [ConsoleCommand("enableCheats", "Enables cheat commands.")]
+        private static void EnableCheatsCommand(Action<string> response, bool enable = true)
+        {
+            ConsoleCommandInvoker.CheatsEnabled = enable;
+
+            string status = enable ? "enabled" : "disabled";
+            response($"Cheats {status}.");
+        }
+#endif
     }
 }

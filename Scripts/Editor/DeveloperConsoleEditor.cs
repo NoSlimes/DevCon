@@ -1,10 +1,9 @@
 using UnityEditor;
-using UnityEngine;
 
 namespace NoSlimes.Util.DevCon.Editor
 {
     [CustomEditor(typeof(DeveloperConsoleUI))]
-    public class DeveloperConsoleEditor : UnityEditor.Editor
+    internal class DeveloperConsoleEditor : UnityEditor.Editor
     {
         private SerializedProperty inputSystemProp;
         private SerializedProperty toggleConsoleActionProp;

@@ -1,4 +1,5 @@
 ﻿using UnityEditor;
+using UnityEditor.Build;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -9,20 +10,19 @@ namespace NoSlimes.Util.DevCon.Editor
     /// </summary>
     public class DevConEditorWindow : EditorWindow
     {
-        private const string AutoRebuildCacheKey = "DevCon_AutoRebuildCache";
-        private const string ExcludeBuiltInCommandsKey = "DevCon_ExcludeBuiltInCommands";
-        private const string DetailedLoggingKey = "DevCon_DetailedLogging";
+
 
         private ConsoleCommandCache commandCache;
 
         private bool isAutoRebuildEnabled;
-        private bool excludeBuiltInCommands;
+        private bool includeBuiltInCommands;
+        private bool includeCheatCommand;
         private bool isDetailedLoggingEnabled;
 
         [MenuItem("Tools/DevCon/DevCon Window")]
         public static void ShowWindow()
         {
-            var window = GetWindow<DevConEditorWindow>("DevCon");
+            DevConEditorWindow window = GetWindow<DevConEditorWindow>("DevCon");
             window.minSize = new Vector2(350, 400);
             window.maxSize = new Vector2(350, 600);
         }
@@ -31,9 +31,10 @@ namespace NoSlimes.Util.DevCon.Editor
         {
             commandCache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
 
-            isAutoRebuildEnabled = EditorPrefs.GetBool(AutoRebuildCacheKey, true);
-            excludeBuiltInCommands = EditorPrefs.GetBool(ExcludeBuiltInCommandsKey, false);
-            isDetailedLoggingEnabled = EditorPrefs.GetBool("DevCon_DetailedLogging", false);
+            isAutoRebuildEnabled = EditorPrefs.GetBool(DevConDefines.AutoRebuildCacheKey, true);
+            includeBuiltInCommands = EditorPrefs.GetBool(DevConDefines.IncludeBuiltInCommandsKey, true);
+            includeCheatCommand = EditorPrefs.GetBool(DevConDefines.IncludeCheatCommandKey, true);
+            isDetailedLoggingEnabled = EditorPrefs.GetBool(DevConDefines.DetailedLoggingKey, false);
 
             rootVisualElement.Clear();
         }
@@ -75,19 +76,26 @@ namespace NoSlimes.Util.DevCon.Editor
             });
 
             // Runtime & Editor section
-            var runtimeSection = CreateSection("Runtime and Editor");
-            var excludeToggle = new ToggleButton("Exclude Built-In Commands from Cache", excludeBuiltInCommands);
-            excludeToggle.OnValueChanged += SetExcludeBuiltInCommands;
-            runtimeSection.Add(excludeToggle);
+            VisualElement runtimeSection = CreateSection("Runtime and Editor");
+
+            var includeBuiltInToggle = new ToggleButton("Include Built-In Commands in Cache", includeBuiltInCommands);
+            includeBuiltInToggle.OnValueChanged += SetIncludeBuiltInCommands;
+            runtimeSection.Add(includeBuiltInToggle);
+
+            var includeCheatToggle = new ToggleButton("Include Built-In Cheat Command in Cache", includeCheatCommand);
+            includeCheatToggle.OnValueChanged += SetIncludeCheatCommand;
+            runtimeSection.Add(includeCheatToggle);
+
             root.Add(runtimeSection);
 
             // Editor section
-            var editorSection = CreateSection("Editor");
+            VisualElement editorSection = CreateSection("Editor");
+
             var autoRebuildToggle = new ToggleButton("Auto Rebuild Cache", isAutoRebuildEnabled);
             autoRebuildToggle.OnValueChanged += val =>
             {
                 isAutoRebuildEnabled = val;
-                EditorPrefs.SetBool(AutoRebuildCacheKey, val);
+                EditorPrefs.SetBool(DevConDefines.AutoRebuildCacheKey, val);
             };
             editorSection.Add(autoRebuildToggle);
 
@@ -95,7 +103,7 @@ namespace NoSlimes.Util.DevCon.Editor
             detailedLoggingToggle.OnValueChanged += val =>
             {
                 isDetailedLoggingEnabled = val;
-                EditorPrefs.SetBool(DetailedLoggingKey, val);
+                EditorPrefs.SetBool(DevConDefines.DetailedLoggingKey, val);
             };
             editorSection.Add(detailedLoggingToggle);
 
@@ -131,11 +139,29 @@ namespace NoSlimes.Util.DevCon.Editor
             rootVisualElement.Add(root);
         }
 
-        private void SetExcludeBuiltInCommands(bool value)
+        private void SetIncludeBuiltInCommands(bool value)
         {
-            excludeBuiltInCommands = value;
-            commandCache.ExcludeBuiltInCommands = value;
-            EditorPrefs.SetBool(ExcludeBuiltInCommandsKey, value);
+            includeBuiltInCommands = value;
+
+            if (includeBuiltInCommands)
+                DevConDefines.EnableBuiltinCommands();
+            else
+                DevConDefines.DisableBuiltinCommands();
+
+            EditorPrefs.SetBool(DevConDefines.IncludeBuiltInCommandsKey, value);
+            SaveCache();
+        }
+
+        private void SetIncludeCheatCommand(bool value)
+        {
+            includeCheatCommand = value;
+
+            if (includeCheatCommand)
+                DevConDefines.EnableBuiltinCheatCommand();
+            else
+                DevConDefines.DisableBuiltinCheatCommand();
+
+            EditorPrefs.SetBool(DevConDefines.IncludeCheatCommandKey, value);
             SaveCache();
         }
 
@@ -188,15 +214,15 @@ namespace NoSlimes.Util.DevCon.Editor
     {
         public bool Value { get; private set; }
 
-        private VisualElement labelContainer;
-        private VisualElement indicator;
-        private Label label;
+        private readonly VisualElement labelContainer;
+        private readonly VisualElement indicator;
+        private readonly Label label;
 
         public event System.Action<bool> OnValueChanged;
 
-        private readonly Color activeColor = new Color(0.5f, 0.9f, 0.5f); // gentle green
-        private readonly Color inactiveColor = new Color(0.9f, 0.5f, 0.5f); // gentle red
-        private readonly Color backgroundColor = new Color(0.3f, 0.3f, 0.3f); // gray
+        private readonly Color activeColor = new(0.5f, 0.9f, 0.5f); // gentle green
+        private readonly Color inactiveColor = new(0.9f, 0.5f, 0.5f); // gentle red
+        private readonly Color backgroundColor = new(0.3f, 0.3f, 0.3f); // gray
 
         public ToggleButton(string text, bool initialValue = false)
         {
@@ -211,47 +237,47 @@ namespace NoSlimes.Util.DevCon.Editor
             style.borderTopLeftRadius = 6;
             style.borderBottomRightRadius = 6;
             style.borderTopRightRadius = 6;
-            style.marginBottom = 6; 
+            style.marginBottom = 6;
             style.overflow = Overflow.Hidden;
 
             labelContainer = new VisualElement
             {
                 style =
-                    {
-                        flexGrow = 1,
-                        paddingLeft = 6,
-                        paddingRight = 6,
-                        flexDirection = FlexDirection.Row,
-                        justifyContent = Justify.FlexStart,  
-                        alignItems = Align.Center       
-                    }
+                {
+                    flexGrow = 1,
+                    paddingLeft = 6,
+                    paddingRight = 6,
+                    flexDirection = FlexDirection.Row,
+                    justifyContent = Justify.FlexStart,
+                    alignItems = Align.Center
+                }
             };
             Add(labelContainer);
 
             label = new Label(text)
             {
                 style =
-                    {
-                        unityFontStyleAndWeight = FontStyle.Bold,
-                        color = Color.white,
-                        unityTextAlign = TextAnchor.MiddleLeft, 
-                        flexShrink = 0
-                    }
+                {
+                    unityFontStyleAndWeight = FontStyle.Bold,
+                    color = Color.white,
+                    unityTextAlign = TextAnchor.MiddleLeft,
+                    flexShrink = 0
+                }
             };
             labelContainer.Add(label);
 
             indicator = new VisualElement
             {
                 style =
-            {
-                width = Length.Percent(10),
-                backgroundColor = Value ? activeColor : inactiveColor,
-                alignSelf = Align.Stretch,
-                borderBottomRightRadius = 6,
-                borderTopRightRadius = 6,
-                borderBottomLeftRadius = 0,
-                borderTopLeftRadius = 0
-            }
+                {
+                    width = Length.Percent(10),
+                    backgroundColor = Value ? activeColor : inactiveColor,
+                    alignSelf = Align.Stretch,
+                    borderBottomRightRadius = 6,
+                    borderTopRightRadius = 6,
+                    borderBottomLeftRadius = 0,
+                    borderTopLeftRadius = 0
+                }
             };
             Add(indicator);
 
@@ -271,5 +297,4 @@ namespace NoSlimes.Util.DevCon.Editor
             indicator.style.backgroundColor = Value ? activeColor : inactiveColor;
         }
     }
-
 }

@@ -192,9 +192,6 @@ namespace NoSlimes.Util.DevCon
                     continue;
                 }
 
-                if (_cache.ExcludeBuiltInCommands && type == typeof(BuiltInCommands))
-                    continue;
-
                 var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance)
                                   .Where(m => m.Name == entry.MethodName)
                                   .ToArray();
