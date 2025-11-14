@@ -85,7 +85,7 @@ namespace NoSlimes.Util.DevCon
 
         #region Time & Physics
 
-        [ConsoleCommand("gravityScale", "Sets the global gravity scale.", flags: CommandFlags.Cheat | CommandFlags.DebugOnly)]
+        [ConsoleCommand("gravityScale", "Sets the global gravity scale.")]
         public static void GravityScaleCommand(Action<string> response, float scale)
         {
             Physics.gravity = new Vector3(0, -9.81f * scale, 0);
