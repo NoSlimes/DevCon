@@ -13,10 +13,12 @@ namespace NoSlimes.Util.DevCon.Editor
         private static readonly string DEVCON_BUILTIN = "DEVCON_BUILTIN";
         private static readonly string DEVCON_ENABLECHEATS = "DEVCON_ENABLECHEATS";
 
-        internal const string AutoRebuildCacheKey = "DevCon_AutoRebuildCache";
-        internal const string IncludeBuiltInCommandsKey = "DevCon_IncludeBuiltInCommands";
-        internal const string IncludeCheatCommandKey = "DevCon_IncludeCheatCommand";
-        internal const string DetailedLoggingKey = "DevCon_DetailedLogging";
+        internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
+
+        internal static string AutoRebuildCacheKey => $"{KeyPrefix}_DevCon_AutoRebuildCache";
+        internal static string IncludeBuiltInCommandsKey => $"{KeyPrefix}_DevCon_IncludeBuiltInCommands";
+        internal static string IncludeCheatCommandKey => $"{KeyPrefix}_DevCon_IncludeCheatCommand";
+        internal static string DetailedLoggingKey => $"{KeyPrefix}_DevCon_DetailedLogging";
 
         static DevConDefines()
         {
