@@ -10,6 +10,7 @@ namespace NoSlimes.Util.DevCon.Editor
     [InitializeOnLoad]
     internal static class DevConDefines
     {
+        private static readonly string DEVCON_DEFINE = "DEVCON";
         private static readonly string DEVCON_BUILTIN = "DEVCON_BUILTIN";
         private static readonly string DEVCON_ENABLECHEATS = "DEVCON_ENABLECHEATS";
 
@@ -24,8 +25,8 @@ namespace NoSlimes.Util.DevCon.Editor
         {
             static void ApplyDefines()
             {
-                bool enableBuiltin = EditorPrefs.GetBool("DevCon_IncludeBuiltInCommands", true);
-                bool enableCheats = EditorPrefs.GetBool("DevCon_IncludeCheatCommand", true);
+                bool enableBuiltin = EditorPrefs.GetBool(IncludeBuiltInCommandsKey, true);
+                bool enableCheats = EditorPrefs.GetBool(IncludeCheatCommandKey, true);
 
                 if (enableBuiltin)
                     EnableBuiltinCommands();
@@ -41,6 +42,8 @@ namespace NoSlimes.Util.DevCon.Editor
             }
 
             EditorApplication.delayCall += ApplyDefines;
+
+            DefineSymbol(DEVCON_DEFINE);
         }
 
         public static void EnableBuiltinCommands() => DefineSymbol(DEVCON_BUILTIN);

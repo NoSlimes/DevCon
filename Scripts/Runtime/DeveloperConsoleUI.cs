@@ -179,6 +179,12 @@ namespace NoSlimes.Util.DevCon
             }
         }
 
+        public void ShowConsole(bool show)
+        {
+            if (consolePanel.activeSelf != show)
+                ToggleConsole();
+        }
+
         public static void ClearLog()
         {
             if (_instance == null) return;
