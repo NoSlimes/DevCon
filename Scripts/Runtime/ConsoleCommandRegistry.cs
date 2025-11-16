@@ -25,8 +25,10 @@ namespace NoSlimes.Util.DevCon
         public static event Action<double> OnCacheLoaded;
 
 #if UNITY_EDITOR
-        private const string AutoRebuildCacheKey = "DevCon_AutoRebuildCache";
-        private const string DetailedLoggingKey = "DevCon_DetailedLogging";
+        internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
+        private static string AutoRebuildCacheKey => $"{KeyPrefix}_DevCon_AutoRebuildCache";
+        private static string DetailedLoggingKey => $"{KeyPrefix}_DevCon_DetailedLogging";
+
 
         static ConsoleCommandRegistry()
         {
@@ -235,7 +237,7 @@ namespace NoSlimes.Util.DevCon
             if (flags.HasFlag(CommandFlags.EditorOnly) && !Application.isEditor)
                 return false;
 
-            return true; 
+            return true;
         }
 
     }
