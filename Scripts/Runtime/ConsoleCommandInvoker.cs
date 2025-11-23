@@ -134,8 +134,8 @@ namespace NoSlimes.Util.DevCon
         {
             if (targetType == typeof(string)) return arg;
 
-            var typeToUse = Nullable.GetUnderlyingType(targetType) ?? targetType;
-            if (ArgConverters.TryGetValue(typeToUse, out var converter))
+            Type typeToUse = Nullable.GetUnderlyingType(targetType) ?? targetType;
+            if (ArgConverters.TryGetValue(typeToUse, out Func<string, object> converter))
                 return converter(arg);
 
             if (targetType == typeof(int) && int.TryParse(arg, out int i)) return i;
@@ -167,7 +167,7 @@ namespace NoSlimes.Util.DevCon
             string command = parts[0].ToLower();
             string[] args = parts.Skip(1).ToArray();
 
-            if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out var methodList))
+            if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out List<MethodInfo> methodList))
             {
                 LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>", false);
                 return;
@@ -177,9 +177,11 @@ namespace NoSlimes.Util.DevCon
             object[] finalArgs = null;
             int bestScore = int.MinValue;
 
-            foreach (var method in methodList)
+            List<string> candidateErrors = new();
+
+            foreach (MethodInfo method in methodList)
             {
-                var parameters = method.GetParameters();
+                ParameterInfo[] parameters = method.GetParameters();
                 int paramOffset = 0;
 
                 bool hasResponse = parameters.Length > 0 &&
@@ -189,7 +191,10 @@ namespace NoSlimes.Util.DevCon
                 if (hasResponse) paramOffset = 1;
 
                 if (args.Length > parameters.Length - paramOffset)
-                    continue; // too many arguments for this overload
+                {
+                    candidateErrors.Add($"[{GetMethodSignature(method)}] Too many arguments provided.");
+                    continue;
+                }
 
                 object[] tempArgs = new object[parameters.Length];
                 if (hasResponse)
@@ -211,14 +216,19 @@ namespace NoSlimes.Util.DevCon
                         {
                             tempArgs[i] = ConvertArg(args[argIndex], parameters[i].ParameterType);
 
-                            // Exact type match scores higher
                             if (parameters[i].ParameterType == tempArgs[i].GetType())
                                 score += 2;
                             else
                                 score += 1;
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            string msg = ex.InnerException?.Message ?? ex.Message;
+                            string paramName = parameters[i].Name;
+                            string typeName = parameters[i].ParameterType.Name;
+
+                            candidateErrors.Add($"[{GetMethodSignature(method)}] Error parsing arg '{paramName}' ({typeName}): {msg}");
+
                             success = false;
                             break;
                         }
@@ -230,6 +240,7 @@ namespace NoSlimes.Util.DevCon
                     }
                     else
                     {
+                        candidateErrors.Add($"[{GetMethodSignature(method)}] Missing required argument '{parameters[i].Name}'.");
                         success = false;
                         break;
                     }
@@ -245,7 +256,11 @@ namespace NoSlimes.Util.DevCon
 
             if (matchedMethod == null)
             {
-                LogHandler($"<color=red>Error: No overload for '{command}' matches the provided arguments.</color>", false);
+                LogHandler($"<color=red>Could not execute '{command}'. Potential reasons:</color>", false);
+                foreach (var error in candidateErrors)
+                {
+                    LogHandler($"<color=#ffaaaa>- {error}</color>", false);
+                }
                 return;
             }
 
@@ -254,7 +269,7 @@ namespace NoSlimes.Util.DevCon
             {
                 try
                 {
-                    var attr = matchedMethod.GetCustomAttribute<ConsoleCommandAttribute>();
+                    ConsoleCommandAttribute attr = matchedMethod.GetCustomAttribute<ConsoleCommandAttribute>();
 
                     bool BlockLocal(string reason)
                     {
@@ -284,10 +299,23 @@ namespace NoSlimes.Util.DevCon
             }
         }
 
+        private static string GetMethodSignature(MethodInfo method)
+        {
+            var pars = method.GetParameters()
+                .Where(p => !(p.ParameterType == typeof(Action<string>) || p.ParameterType == typeof(Action<string, bool>)))
+                .Select(p => $"{p.ParameterType.Name} {p.Name}")
+                .ToArray();
+
+            // Om inga parametrar finns, visa ()
+            if (pars.Length == 0) return "void";
+
+            return string.Join(", ", pars);
+        }
+
         private static object ResolveTarget(MethodInfo method)
         {
             if (method.IsStatic) return null;
-            var targetType = method.DeclaringType;
+            Type targetType = method.DeclaringType;
 
             object targetInstance = null;
 
@@ -310,20 +338,20 @@ namespace NoSlimes.Util.DevCon
             if (string.IsNullOrEmpty(commandName))
             {
                 helpBuilder.AppendLine("Available Commands:");
-                foreach (var kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
+                foreach (KeyValuePair<string, List<MethodInfo>> kv in ConsoleCommandRegistry.Commands.OrderBy(c => c.Key))
                 {
                     var methods = kv.Value.Distinct().ToList();
                     helpBuilder.AppendLine($"- {kv.Key} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")}):");
 
-                    foreach (var method in methods)
+                    foreach (MethodInfo method in methods)
                     {
-                        var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                        ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
 
                         // Skip hidden commands in general help listing
                         if (attribute.Flags.HasFlag(CommandFlags.Hidden))
                             continue;
 
-                        var parameters = method.GetParameters();
+                        ParameterInfo[] parameters = method.GetParameters();
 
                         string argsInfo = string.Join(" ", parameters
                             .Where((p, index) => !(index == 0 &&
@@ -331,8 +359,8 @@ namespace NoSlimes.Util.DevCon
                                  p.ParameterType == typeof(Action<string, bool>))))
                             .Select(p =>
                                 p.HasDefaultValue
-                                    ? $"<{p.Name}={p.DefaultValue}>"
-                                    : $"<{p.Name}>"));
+                                    ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
+                                    : $"<{p.Name} ({p.ParameterType.Name})>"));
 
                         helpBuilder.AppendLine($"    {attribute.Command} {argsInfo} - {attribute.Description}");
                     }
@@ -341,16 +369,16 @@ namespace NoSlimes.Util.DevCon
             else
             {
                 string cmdName = commandName.ToLower();
-                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out var methodList))
+                if (ConsoleCommandRegistry.Commands.TryGetValue(cmdName, out List<MethodInfo> methodList))
                 {
                     var methods = methodList.Distinct().ToList();
 
                     helpBuilder.AppendLine($"Command: {cmdName} ({methods.Count} overload{(methods.Count > 1 ? "s" : "")})");
 
-                    foreach (var method in methods)
+                    foreach (MethodInfo method in methods)
                     {
-                        var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
-                        var parameters = method.GetParameters();
+                        ConsoleCommandAttribute attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
+                        ParameterInfo[] parameters = method.GetParameters();
 
                         string argsInfo = string.Join(" ", parameters
                             .Where((p, index) => !(index == 0 &&
@@ -358,12 +386,12 @@ namespace NoSlimes.Util.DevCon
                                  p.ParameterType == typeof(Action<string, bool>))))
                             .Select(p =>
                                 p.HasDefaultValue
-                                    ? $"<{p.Name}={p.DefaultValue}>"
-                                    : $"<{p.Name}>"));
+                                    ? $"<{p.Name} ({p.ParameterType.Name})={(p.DefaultValue is string s && s == string.Empty ? "\"\"" : p.DefaultValue)}>"
+                                    : $"<{p.Name} ({p.ParameterType.Name})>"));
 
                         helpBuilder.AppendLine($"  Description: {attribute.Description}");
                         if (parameters.Length > 0) helpBuilder.AppendLine($"  Arguments: {argsInfo}");
-                        helpBuilder.AppendLine(); // extra line between overloads
+                        helpBuilder.AppendLine(); 
                     }
                 }
                 else

@@ -19,6 +19,8 @@ namespace NoSlimes.Util.DevCon
     {
         private static ConsoleCommandCache _cache;
 
+        private static readonly HashSet<Assembly> runtimeAssemblies = new();
+
         private static readonly Dictionary<string, List<MethodInfo>> _commands = new();
         public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
 
@@ -172,6 +174,14 @@ namespace NoSlimes.Util.DevCon
 
         public static void DiscoverCommandsInAssembly(Assembly assembly)
         {
+            if(assembly == null)
+                throw new ArgumentNullException(nameof(assembly));
+
+            if(!runtimeAssemblies.Contains(assembly))
+            {
+                runtimeAssemblies.Add(assembly);
+            }
+
             DiscoverCommands(new[] { assembly }, false);
         }
 
@@ -190,7 +200,7 @@ namespace NoSlimes.Util.DevCon
                 Type type = Type.GetType(entry.DeclaringType);
                 if (type == null)
                 {
-                    Debug.LogWarning($"Type '{entry.DeclaringType}' not found.");
+                    Debug.LogWarning($"[DevConsole] Type '{entry.DeclaringType}' not found.");
                     continue;
                 }
 
@@ -200,7 +210,7 @@ namespace NoSlimes.Util.DevCon
 
                 if (methods.Length == 0)
                 {
-                    Debug.LogWarning($"Method '{entry.MethodName}' not found on type '{type.FullName}'.");
+                    Debug.LogWarning($"[DevConsole] Method '{entry.MethodName}' not found on type '{type.FullName}'.");
                     continue;
                 }
 
@@ -218,6 +228,12 @@ namespace NoSlimes.Util.DevCon
                         _commands[key].Add(method);
                     }
                 }
+            }
+
+            if(runtimeAssemblies.Count > 0)
+            {
+                Debug.Log($"[DevConsole] Discovering commands in {runtimeAssemblies.Count} runtime assemblies.");
+                DiscoverCommands(runtimeAssemblies, false);
             }
 
             stopwatch.Stop();
