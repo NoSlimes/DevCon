@@ -1290,6 +1290,16 @@ MonoBehaviour:
   dontDestroyOnLoad: 1
   catchUnityLogs: 0
   controlCursorLockMode: 0
+  commandSeparator: 124
+  backgroundColor: {r: 0, g: 0, b: 0, a: 0.95}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  warningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
+  errorColor: {r: 1, g: 0, b: 0, a: 1}
+  exceptionColor: {r: 1, g: 0, b: 0, a: 1}
+  assertColor: {r: 1, g: 0, b: 0, a: 1}
+  consoleFont: {fileID: 11400000, guid: bc6c37bf910742642a3e463c2ccd18c4, type: 2}
+  inputFontSize: 14
+  logFontSize: 20
 --- !u!1 &8077833049188354319
 GameObject:
   m_ObjectHideFlags: 0

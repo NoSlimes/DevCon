@@ -1,13 +1,14 @@
+using UnityEngine;
+using UnityEngine.InputSystem;
+using TMPro;
+using UnityEngine.UI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection; // Required for MethodInfo
+using System.Reflection;
 using System.Text.RegularExpressions;
-using TMPro;
-using UnityEngine;
-using UnityEngine.InputSystem;
-using UnityEngine.UI;
+using Codice.Client.Common.GameUI;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -37,6 +38,17 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private bool controlCursorLockMode = false;
         [SerializeField] private char commandSeparator = '|';
 
+        [SerializeField] private Color backgroundColor = new Color(0f, 0f, 0f, 0.95f);
+        [SerializeField] private Color textColor = Color.white;
+        [SerializeField] private Color warningColor = Color.yellow;
+        [SerializeField] private Color errorColor = Color.red;
+        [SerializeField] private Color exceptionColor = Color.red;
+        [SerializeField] private Color assertColor = Color.red;
+
+        [SerializeField] private TMP_FontAsset consoleFont;
+        [SerializeField] private int inputFontSize = 14;
+        [SerializeField] private int logFontSize = 20;
+
         private readonly List<string> logHistory = new();
         private readonly List<string> commandHistory = new();
         private int commandHistoryIndex = -1;
@@ -46,7 +58,8 @@ namespace NoSlimes.Util.DevCon
         private string lastTypedPrefix = "";
         private List<string> currentMatches = new List<string>();
         private int autoCompleteIndex = -1;
-        private string cachedBaseCommand = ""; // Stores "cmd arg1 " so we can append the suggestion
+        private string cachedBaseCommand = "";
+        private bool ignoreNextValueChange = false; 
 
         public static event Action<bool> OnConsoleToggled;
 
@@ -79,7 +92,26 @@ namespace NoSlimes.Util.DevCon
             ConsoleCommandRegistry.OnCacheLoaded += HandleCacheLoaded;
             ConsoleCommandRegistry.LoadCache();
 
-            ConsoleCommandInvoker.LogHandler = LogToConsole;
+            ConsoleCommandInvoker.LogHandler += LogToConsole;
+
+            ApplyStyles();
+        }
+
+        private void ApplyStyles()
+        {
+            if(consolePanel.TryGetComponent(out Image consolePanelImage))
+            {
+                consolePanelImage.color = backgroundColor;
+            }
+
+            if (consoleFont != null)
+            {
+                inputField.textComponent.font = consoleFont;
+                consoleLog.font = consoleFont;
+            }
+
+            inputField.textComponent.fontSize = inputFontSize;
+            consoleLog.fontSize = logFontSize;
         }
 
         private void HandleCacheLoaded(double ms)
@@ -122,6 +154,11 @@ namespace NoSlimes.Util.DevCon
 
             inputField.onValueChanged.AddListener((val) =>
             {
+                if (ignoreNextValueChange)
+                {
+                    ignoreNextValueChange = false;
+                    return;
+                }
                 autoCompleteIndex = -1;
             });
 
@@ -174,6 +211,11 @@ namespace NoSlimes.Util.DevCon
 #endif
         }
 
+        private void OnDestroy()
+        {
+            ConsoleCommandInvoker.LogHandler -= LogToConsole;
+        }
+
         private void Update()
         {
             if (inputSystem == InputSystemType.Old)
@@ -207,14 +249,21 @@ namespace NoSlimes.Util.DevCon
         {
             string color = type switch
             {
-                LogType.Log => "white",
-                LogType.Warning => "yellow",
-                LogType.Error => "red",
-                LogType.Exception => "red",
+                LogType.Log => FormatColorLocal(textColor),
+                LogType.Warning => FormatColorLocal(warningColor),
+                LogType.Error => FormatColorLocal(errorColor),
+                LogType.Exception => FormatColorLocal(exceptionColor),
+                LogType.Assert => FormatColorLocal(assertColor),
                 _ => "white",
             };
 
             LogToConsole($"<color={color}>{logString}</color>");
+            return;
+
+            static string FormatColorLocal(Color color)
+            {
+                return ColorUtility.ToHtmlStringRGBA(color);
+            }
         }
 
         private void ToggleConsole()
@@ -303,7 +352,9 @@ namespace NoSlimes.Util.DevCon
         private void AutoComplete()
         {
             string fullInput = inputField.text;
-            if (string.IsNullOrWhiteSpace(fullInput)) return;
+
+            // Allow empty string to proceed (to show all commands)
+            if (fullInput == null) fullInput = "";
 
             string globalPrefix = "";
             string activeCommand = fullInput;
@@ -326,62 +377,69 @@ namespace NoSlimes.Util.DevCon
                 activeCommand = activeCommand.TrimStart();
             }
 
-            if (string.IsNullOrEmpty(activeCommand)) return;
-
-            var tokenMatches = Regex.Matches(activeCommand, @"[\""].+?[\""]|[^ ]+");
-            var partsList = tokenMatches.Cast<Match>().Select(m => m.Value).ToList();
-
-            if (activeCommand.EndsWith(" "))
-                partsList.Add("");
-
-            string[] parts = partsList.ToArray();
+            // --- Regex Tokenizing that handles Empty String ---
+            string[] parts;
+            if (string.IsNullOrEmpty(activeCommand))
+            {
+                parts = new string[] { "" }; // Simulate one empty argument
+            }
+            else
+            {
+                var tokenMatches = Regex.Matches(activeCommand, @"[\""].+?[\""]|[^ ]+");
+                var partsList = tokenMatches.Cast<Match>().Select(m => m.Value).ToList();
+                if (activeCommand.EndsWith(" ")) partsList.Add("");
+                parts = partsList.ToArray();
+            }
 
             int currentPartIndex = parts.Length - 1;
             string typedPrefix = parts[currentPartIndex];
-
             string cleanPrefix = typedPrefix.Replace("\"", "");
+
             bool isHelpArg = (parts.Length > 1 && parts[0].Equals("help", StringComparison.OrdinalIgnoreCase));
 
-            if (typedPrefix != lastTypedPrefix || currentMatches.Count == 0 || autoCompleteIndex == -1)
+            if (autoCompleteIndex == -1 || (typedPrefix != lastTypedPrefix))
             {
-                lastTypedPrefix = typedPrefix;
-                autoCompleteIndex = -1;
-                currentMatches.Clear();
+                bool isContinuingCycle = (currentMatches.Count > 0 && autoCompleteIndex != -1 && typedPrefix == currentMatches[autoCompleteIndex]);
 
-                if (currentPartIndex == 0 || isHelpArg)
+                if (!isContinuingCycle)
                 {
-                    currentMatches = ConsoleCommandRegistry.Commands.Keys
-                        .Where(k => k.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase))
-                        .OrderBy(k => k)
-                        .ToList();
-                }
-                else
-                {
-                    string commandName = parts[0].ToLower();
+                    autoCompleteIndex = -1;
+                    currentMatches.Clear();
 
-                    if (ConsoleCommandRegistry.Commands.TryGetValue(commandName, out List<MethodInfo> methods))
+                    if (currentPartIndex == 0 || isHelpArg)
                     {
-                        int methodArgIndex = currentPartIndex - 1;
-                        HashSet<string> distinctSuggestions = new HashSet<string>();
-
-                        foreach (var method in methods)
-                        {
-                            var suggestions = ConsoleCommandInvoker.GetAutoCompleteSuggestions(method, methodArgIndex, cleanPrefix);
-                            foreach (var s in suggestions) distinctSuggestions.Add(s);
-                        }
-
-                        currentMatches = distinctSuggestions.OrderBy(s => s).ToList();
+                        currentMatches = ConsoleCommandRegistry.Commands.Keys
+                            .Where(k => k.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase))
+                            .OrderBy(k => k)
+                            .ToList();
                     }
-                }
+                    else
+                    {
+                        string commandName = parts[0].ToLower();
+                        if (ConsoleCommandRegistry.Commands.TryGetValue(commandName, out List<MethodInfo> methods))
+                        {
+                            int methodArgIndex = currentPartIndex - 1;
+                            HashSet<string> distinctSuggestions = new HashSet<string>();
 
-                if (parts.Length > 1)
-                {
-                    string preSegments = string.Join(" ", parts, 0, parts.Length - 1);
-                    cachedBaseCommand = globalPrefix + whitespaceBeforeCmd + preSegments + " ";
-                }
-                else
-                {
-                    cachedBaseCommand = globalPrefix + whitespaceBeforeCmd;
+                            foreach (var method in methods)
+                            {
+                                var suggestions = ConsoleCommandInvoker.GetAutoCompleteSuggestions(method, methodArgIndex, cleanPrefix);
+                                foreach (var s in suggestions) distinctSuggestions.Add(s);
+                            }
+                            currentMatches = distinctSuggestions.OrderBy(s => s).ToList();
+                        }
+                    }
+
+                    // Build base string
+                    if (parts.Length > 1)
+                    {
+                        string preSegments = string.Join(" ", parts, 0, parts.Length - 1);
+                        cachedBaseCommand = globalPrefix + whitespaceBeforeCmd + preSegments + " ";
+                    }
+                    else
+                    {
+                        cachedBaseCommand = globalPrefix + whitespaceBeforeCmd;
+                    }
                 }
             }
 
@@ -390,18 +448,18 @@ namespace NoSlimes.Util.DevCon
             autoCompleteIndex = (autoCompleteIndex + 1) % currentMatches.Count;
             string selectedMatch = currentMatches[autoCompleteIndex];
 
-            if (selectedMatch.Contains(" "))
+            // Quote handling
+            if (selectedMatch.Contains(" ") && !selectedMatch.StartsWith("\""))
             {
-                if (!selectedMatch.StartsWith("\""))
-                {
-                    selectedMatch = $"\"{selectedMatch}\"";
-                }
+                selectedMatch = $"\"{selectedMatch}\"";
             }
 
+            ignoreNextValueChange = true;
             inputField.text = cachedBaseCommand + selectedMatch;
-            lastTypedPrefix = selectedMatch;
 
-            StartCoroutine(MoveCaretToEndCoroutine());
+            inputField.caretPosition = inputField.text.Length;
+
+            lastTypedPrefix = selectedMatch;
         }
 
 #if ENABLE_INPUT_SYSTEM
@@ -434,5 +492,12 @@ namespace NoSlimes.Util.DevCon
             response($"Unity logs are now <color={color}>{(_instance.catchUnityLogs ? "enabled" : "disabled")}</color>");
         }
         #endregion
+
+#if UNITY_EDITOR
+        private void OnValidate()
+        {
+            ApplyStyles();
+        }
+#endif
     }
 }
