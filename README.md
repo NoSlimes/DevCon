@@ -166,7 +166,7 @@ You can provide dynamic suggestions for your string arguments (e.g., Item IDs, E
 Useful for small lists. The system retrieves all options and filters them based on what the user typed.
 
 ```csharp
-[ConsoleCommand("spawn", "Spawns an entity.", autoCompleteMethod: "GetEntityNames")]
+[ConsoleCommand("spawn", "Spawns an entity.", autoCompleteMethod: nameof(GetEntityNames))]
 public static void SpawnCommand(string entityName)
 {
     // Spawn logic...
@@ -183,7 +183,7 @@ private static IEnumerable<string> GetEntityNames()
 Useful for large datasets (like item databases). If your method accepts a `string` parameter, DevCon will pass the current input prefix to you, allowing you to optimize the search.
 
 ```csharp
-[ConsoleCommand("give", "Gives an item.", autoCompleteMethod: "SearchItems")]
+[ConsoleCommand("give", "Gives an item.", autoCompleteMethod: nameof(SearchItems))]
 public static void GiveCommand(string itemId) { ... }
 
 // The 'prefix' contains what the user has typed so far (e.g., "Swor")
