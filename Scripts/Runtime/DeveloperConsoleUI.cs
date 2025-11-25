@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using TMPro;
 using UnityEngine.UI;
 using System;
@@ -8,6 +7,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
+
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 namespace NoSlimes.Util.DevCon
 {
@@ -37,8 +40,8 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private bool controlCursorLockMode = false;
         [SerializeField] private char commandSeparator = '|';
 
-        [SerializeField] private Color backgroundColor = new Color(0f, 0f, 0f, 0.95f);
-        [SerializeField] private Color accentColor = new Color(1f, 1f, 1f, 1f);
+        [SerializeField] private Color backgroundColor = new(0f, 0f, 0f, 0.95f);
+        [SerializeField] private Color accentColor = new(1f, 1f, 1f, 1f);
         [SerializeField] private Color textColor = Color.white;
         [SerializeField] private Color warningColor = Color.yellow;
         [SerializeField] private Color errorColor = Color.red;
@@ -56,11 +59,14 @@ namespace NoSlimes.Util.DevCon
 
         // Autocomplete state
         private string lastTypedPrefix = "";
-        private List<string> currentMatches = new List<string>();
+        private List<string> currentMatches = new();
         private int autoCompleteIndex = -1;
         private string cachedBaseCommand = "";
         private bool ignoreNextValueChange = false;
 
+        private readonly System.Collections.Concurrent.ConcurrentQueue<(string logString, string stackTrace, LogType type)> logQueue = new();
+
+        private static readonly Regex TokenizerRegex = new Regex(@"[\""].+?[\""]|[^ ]+", RegexOptions.Compiled);
         public static event Action<bool> OnConsoleToggled;
 
         protected virtual void Awake()
@@ -231,6 +237,11 @@ namespace NoSlimes.Util.DevCon
 
         private void Update()
         {
+            while (logQueue.TryDequeue(out var logEntry))
+            {
+                ProcessLogMessage(logEntry.logString, logEntry.stackTrace, logEntry.type);
+            }
+
             if (inputSystem == InputSystemType.Old)
             {
                 if (Input.GetKeyDown(toggleConsoleKey)) ToggleConsole();
@@ -259,6 +270,11 @@ namespace NoSlimes.Util.DevCon
         }
 
         private void HandleLogMessage(string logString, string stackTrace, LogType type)
+        {
+            logQueue.Enqueue((logString, stackTrace, type));
+        }
+
+        private void ProcessLogMessage(string logString, string stackTrace, LogType type)
         {
             string color = type switch
             {
@@ -398,7 +414,7 @@ namespace NoSlimes.Util.DevCon
             }
             else
             {
-                var tokenMatches = Regex.Matches(activeCommand, @"[\""].+?[\""]|[^ ]+");
+                var tokenMatches = TokenizerRegex.Matches(activeCommand);
                 var partsList = tokenMatches.Cast<Match>().Select(m => m.Value).ToList();
                 if (activeCommand.EndsWith(" ")) partsList.Add("");
                 parts = partsList.ToArray();
@@ -439,7 +455,10 @@ namespace NoSlimes.Util.DevCon
                                 var suggestions = ConsoleCommandInvoker.GetAutoCompleteSuggestions(method, methodArgIndex, cleanPrefix);
                                 foreach (var s in suggestions) distinctSuggestions.Add(s);
                             }
-                            currentMatches = distinctSuggestions.OrderBy(s => s).ToList();
+                            currentMatches = distinctSuggestions
+                                .OrderByDescending(s => s.Equals("true", StringComparison.OrdinalIgnoreCase)) // sneaky logic to put "true" before "false" >:)
+                                .ThenBy(s => s)
+                                .ToList();
                         }
                     }
 

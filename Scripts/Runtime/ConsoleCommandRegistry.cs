@@ -5,7 +5,6 @@ using System.Reflection;
 using UnityEngine;
 using static NoSlimes.Util.DevCon.ConsoleCommandCache;
 
-
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -18,19 +17,16 @@ namespace NoSlimes.Util.DevCon
     public static class ConsoleCommandRegistry
     {
         private static ConsoleCommandCache _cache;
-
         private static readonly HashSet<Assembly> runtimeAssemblies = new();
-
         private static readonly Dictionary<string, List<MethodInfo>> _commands = new();
-        public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
 
+        public static IReadOnlyDictionary<string, List<MethodInfo>> Commands => _commands;
         public static event Action<double> OnCacheLoaded;
 
 #if UNITY_EDITOR
         internal static string KeyPrefix => $"{PlayerSettings.companyName}_{PlayerSettings.productName}_{PlayerSettings.productGUID}";
         private static string AutoRebuildCacheKey => $"{KeyPrefix}_DevCon_AutoRebuildCache";
         private static string DetailedLoggingKey => $"{KeyPrefix}_DevCon_DetailedLogging";
-
 
         static ConsoleCommandRegistry()
         {
@@ -67,7 +63,8 @@ namespace NoSlimes.Util.DevCon
                 _commands.Clear();
 
             assemblies ??= AppDomain.CurrentDomain.GetAssemblies();
-            var methods = new List<MethodInfo>();
+
+            List<(MethodInfo Method, ConsoleCommandAttribute Attr)> validCommands = new();
 
             foreach (var assembly in assemblies)
             {
@@ -79,25 +76,39 @@ namespace NoSlimes.Util.DevCon
                 {
                     foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance))
                     {
-                        if (m.IsDefined(typeof(ConsoleCommandAttribute), false))
+                        try
                         {
-                            if (!m.IsStatic && !t.IsSubclassOf(typeof(UnityEngine.Object)))
-                            {
-                                Debug.LogError(
-                                    $"Non-static command '{m.Name}' is in class '{t.Name}' which does not inherit from UnityEngine.Object. " +
-                                    $"Command methods in standard C# classes must be static. Skipping.");
-                                continue;
-                            }
+                            var attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
 
-                            methods.Add(m);
+                            if (attr != null)
+                            {
+                                if (!m.IsStatic && !t.IsSubclassOf(typeof(UnityEngine.Object)))
+                                {
+                                    Debug.LogError($"[DevCon] Non-static command '{attr.Command}' in '{t.Name}.{m.Name}' is in a standard C# class. Must be static. Skipping.");
+                                    continue;
+                                }
+
+                                validCommands.Add((m, attr));
+                            }
+                        }
+                        catch (MissingMethodException ex)
+                        {
+                            Debug.LogWarning($"[DevCon] Skipped command in '{t.Name}.{m.Name}'. Missing Method (likely attribute version mismatch): {ex.Message}");
+                        }
+                        catch (TypeLoadException ex)
+                        {
+                            Debug.LogWarning($"[DevCon] Skipped command in '{t.Name}.{m.Name}'. Type Load Error: {ex.Message}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.LogError($"[DevCon] Error processing method '{m.Name}' in type '{t.Name}': {ex}");
                         }
                     }
                 }
             }
 
-            foreach (var method in methods)
+            foreach (var (method, attribute) in validCommands)
             {
-                var attribute = method.GetCustomAttribute<ConsoleCommandAttribute>();
                 string commandName = attribute.Command.ToLower();
 
                 if (!_commands.ContainsKey(commandName))
@@ -107,7 +118,13 @@ namespace NoSlimes.Util.DevCon
             }
 
 #if UNITY_EDITOR
-            // Update ScriptableObject cache in editor
+            UpdateCacheEditor(validCommands.Select(x => x.Method).ToList());
+#endif
+        }
+
+#if UNITY_EDITOR
+        private static void UpdateCacheEditor(List<MethodInfo> methods)
+        {
             _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
             if (_cache == null)
             {
@@ -128,14 +145,18 @@ namespace NoSlimes.Util.DevCon
                 previousCommands = new List<CommandEntry>(_cache.Commands);
             }
 
-            _cache.Commands = methods.Select(m => new ConsoleCommandCache.CommandEntry
+            _cache.Commands = methods.Select(static m =>
             {
-                CommandName = m.GetCustomAttribute<ConsoleCommandAttribute>()?.Command ?? m.Name,
-                Description = m.GetCustomAttribute<ConsoleCommandAttribute>()?.Description ?? "",
-                Flags = m.GetCustomAttribute<ConsoleCommandAttribute>()?.Flags ?? CommandFlags.None,
-                DeclaringType = m.DeclaringType.AssemblyQualifiedName,
-                MethodName = m.Name,
-                ParameterTypes = m.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray()
+                var attr = m.GetCustomAttribute<ConsoleCommandAttribute>();
+                return new CommandEntry
+                {
+                    CommandName = attr?.Command ?? m.Name,
+                    Description = attr?.Description ?? "",
+                    Flags = attr?.Flags ?? CommandFlags.None,
+                    DeclaringType = m.DeclaringType?.AssemblyQualifiedName,
+                    MethodName = m.Name,
+                    ParameterTypes = m.GetParameters().Select(p => p.ParameterType.AssemblyQualifiedName).ToArray()
+                };
             }).ToArray();
 
             EditorUtility.SetDirty(_cache);
@@ -146,38 +167,45 @@ namespace NoSlimes.Util.DevCon
 
             if (detailedLogging)
             {
-                foreach (var entry in _cache.Commands)
+                LogCacheChanges(previousCommands, _cache.Commands);
+            }
+        }
+
+        private static void LogCacheChanges(List<CommandEntry> previousCommands, CommandEntry[] currentCommands)
+        {
+            if (previousCommands == null) return;
+
+            foreach (var entry in currentCommands)
+            {
+                var prevEntry = previousCommands.FirstOrDefault(e => e.CommandName == entry.CommandName);
+                if (prevEntry == null)
                 {
-                    var prevEntry = previousCommands?.FirstOrDefault(e => e.CommandName == entry.CommandName);
-                    if (prevEntry == null)
-                    {
-                        Debug.Log($"[DevConsole] New command added: {entry.CommandName}");
-                    }
-                    else
-                    {
-                        if (prevEntry.DeclaringType != entry.DeclaringType || prevEntry.MethodName != entry.MethodName || prevEntry.Flags != entry.Flags)
-                        {
-                            Debug.Log($"[DevConsole] Command modified: {entry.CommandName} (was {prevEntry.DeclaringType}.{prevEntry.MethodName}, now {entry.DeclaringType}.{entry.MethodName})");
-                        }
-                    }
+                    Debug.Log($"[DevConsole] New command added: {entry.CommandName}");
                 }
-                foreach (var prevEntry in previousCommands)
+                else
                 {
-                    if (!_cache.Commands.Any(e => e.CommandName == prevEntry.CommandName))
+                    if (prevEntry.DeclaringType != entry.DeclaringType || prevEntry.MethodName != entry.MethodName || prevEntry.Flags != entry.Flags)
                     {
-                        Debug.Log($"[DevConsole] Command removed: {prevEntry.CommandName}");
+                        Debug.Log($"[DevConsole] Command modified: {entry.CommandName} (was {prevEntry.DeclaringType}.{prevEntry.MethodName}, now {entry.DeclaringType}.{entry.MethodName})");
                     }
                 }
             }
-#endif
+            foreach (var prevEntry in previousCommands)
+            {
+                if (!currentCommands.Any(e => e.CommandName == prevEntry.CommandName))
+                {
+                    Debug.Log($"[DevConsole] Command removed: {prevEntry.CommandName}");
+                }
+            }
         }
+#endif
 
         public static void DiscoverCommandsInAssembly(Assembly assembly)
         {
-            if(assembly == null)
+            if (assembly == null)
                 throw new ArgumentNullException(nameof(assembly));
 
-            if(!runtimeAssemblies.Contains(assembly))
+            if (!runtimeAssemblies.Contains(assembly))
             {
                 runtimeAssemblies.Add(assembly);
             }
@@ -187,7 +215,7 @@ namespace NoSlimes.Util.DevCon
 
         public static void LoadCache()
         {
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
             _cache = Resources.Load<ConsoleCommandCache>("DevCon/ConsoleCommandCache");
             if (_cache == null)
@@ -230,7 +258,7 @@ namespace NoSlimes.Util.DevCon
                 }
             }
 
-            if(runtimeAssemblies.Count > 0)
+            if (runtimeAssemblies.Count > 0)
             {
                 Debug.Log($"[DevConsole] Discovering commands in {runtimeAssemblies.Count} runtime assemblies.");
                 DiscoverCommands(runtimeAssemblies, false);
@@ -255,6 +283,5 @@ namespace NoSlimes.Util.DevCon
 
             return true;
         }
-
     }
 }

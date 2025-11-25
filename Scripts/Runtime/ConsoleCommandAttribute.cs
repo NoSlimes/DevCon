@@ -6,38 +6,51 @@ namespace NoSlimes.Util.DevCon
     public enum CommandFlags
     {
         None = 0,
-        DebugOnly = 1 << 0, // Command is only available in debug builds
-        EditorOnly = 1 << 1, // Command is only available in the editor
-        Cheat = 1 << 2, // Command is considered a cheat command
-        Mod = 1 << 3, // Command is added by a mod
-        Hidden = 1 << 4 // Command will not show up in help listings
+        DebugOnly = 1 << 0,
+        EditorOnly = 1 << 1,
+        Cheat = 1 << 2,
+        Mod = 1 << 3,
+        Hidden = 1 << 4
     }
 
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
     public sealed class ConsoleCommandAttribute : Attribute
     {
-        internal string Command { get; }
-        internal string Description { get; }
-        internal CommandFlags Flags { get; set; } = CommandFlags.None;
+        public string Command { get; }
+        public string Description { get; }
 
-        internal string AutoCompleteProviderName { get; set; } = "";
+        public CommandFlags Flags { get; set; } = CommandFlags.None;
+        public string AutoCompleteProvider { get; set; } = "";
 
-
-        public ConsoleCommandAttribute(
-            string command,
-            string description = "",
-            CommandFlags flags = CommandFlags.None,
-            string autoCompleteMethod = "")
+        public ConsoleCommandAttribute(string command, string description)
         {
-            if ((flags & CommandFlags.DebugOnly) != 0 && (flags & CommandFlags.EditorOnly) != 0)
-            {
-                throw new ArgumentException("DebugOnly and EditorOnly cannot be set at the same time.");
-            }
+            Command = command;
+            Description = description;
+        }
 
+
+        [Obsolete("Use [ConsoleCommand(cmd, desc, Flags = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description, CommandFlags flags)
+        {
             Command = command;
             Description = description;
             Flags = flags;
-            AutoCompleteProviderName = autoCompleteMethod;
+        }
+
+        [Obsolete("Use [ConsoleCommand(cmd, desc, Flags = ..., AutoCompleteProviderName = ...)] instead.")]
+        public ConsoleCommandAttribute(string command, string description, CommandFlags flags, string autoCompleteMethod)
+        {
+            Command = command;
+            Description = description;
+            Flags = flags;
+            AutoCompleteProvider = autoCompleteMethod;
+        }
+
+        [Obsolete("Use [ConsoleCommand(cmd, desc)] instead.")]
+        public ConsoleCommandAttribute(string command)
+        {
+            Command = command;
+            Description = "";
         }
     }
 }

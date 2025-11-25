@@ -133,8 +133,8 @@ namespace NoSlimes.Util.DevCon
         );
 
         private static readonly Dictionary<Type, Func<string, object>> ArgConverters = new();
-        private static readonly Dictionary<Type, MethodInfo> CachedProviders = new();
         private static readonly Dictionary<MethodInfo, MethodInfo> SuggestionMethodCache = new();
+        private static readonly Dictionary<Type, UnityEngine.Object> UnityInstanceCache = new();
 
         public static void RegisterArgConverter<T>(Func<string, T> converter)
         {
@@ -143,9 +143,14 @@ namespace NoSlimes.Util.DevCon
 
         private static string[] Tokenize(string input)
         {
-            return ArgTokenizer.Matches(input)
-                .Select(m => m.Value.Trim('"'))
-                .ToArray();
+            var matches = ArgTokenizer.Matches(input);
+            string[] results = new string[matches.Count];
+
+            for (int i = 0; i < matches.Count; i++)
+            {
+                results[i] = matches[i].Value.Trim('"');
+            }
+            return results;
         }
 
         private static object ConvertArg(string arg, Type targetType)
@@ -310,9 +315,9 @@ namespace NoSlimes.Util.DevCon
                 {
                     string exceptionString = "";
 #if DEBUG
-                    exceptionString = e.InnerException.Message;
+                    exceptionString = $": {e.InnerException?.Message ?? e.Message}";
 #endif
-                    LogHandler(Colorize($"Error: An exception occurred while executing command '{command}': {exceptionString}", Settings.ErrorColor), false);
+                    LogHandler(Colorize($"Error: An exception occurred while executing command '{command}'{exceptionString}", Settings.ErrorColor), false);
                 }
             }
             else
@@ -338,11 +343,24 @@ namespace NoSlimes.Util.DevCon
             if (method.IsStatic) return null;
             Type targetType = method.DeclaringType;
 
+            if (UnityInstanceCache.TryGetValue(targetType, out UnityEngine.Object cachedInstance))
+            {
+                if (cachedInstance != null)
+                    return cachedInstance;
+
+                UnityInstanceCache.Remove(targetType);
+            }
+
             object targetInstance = null;
 
             if (targetType.IsSubclassOf(typeof(UnityEngine.Object)))
             {
                 targetInstance = UnityEngine.Object.FindFirstObjectByType(targetType);
+
+                if (targetInstance != null)
+                {
+                    UnityInstanceCache[targetType] = (UnityEngine.Object)targetInstance;
+                }
             }
             else
             {
@@ -438,12 +456,12 @@ namespace NoSlimes.Util.DevCon
 
             var paramType = parameters[argIndex].ParameterType;
 
-            if (!string.IsNullOrEmpty(attr?.AutoCompleteProviderName))
+            if (!string.IsNullOrEmpty(attr?.AutoCompleteProvider))
             {
                 if (!SuggestionMethodCache.TryGetValue(method, out MethodInfo providerMethod))
                 {
                     providerMethod = method.DeclaringType.GetMethod(
-                        attr.AutoCompleteProviderName,
+                        attr.AutoCompleteProvider,
                         BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
 
                     if (providerMethod != null &&
@@ -454,8 +472,8 @@ namespace NoSlimes.Util.DevCon
                     else
                     {
                         SuggestionMethodCache[method] = null;
-                        LogHandler(Colorize($"Could not find static IEnumerable<string> {attr.AutoCompleteProviderName}() in {method.DeclaringType.Name}", Settings.WarningColor), false);
-                        Debug.LogWarning($"[DevCon] Could not find static IEnumerable<string> {attr.AutoCompleteProviderName}() in {method.DeclaringType.Name}");
+                        LogHandler(Colorize($"Could not find static IEnumerable<string> {attr.AutoCompleteProvider}() in {method.DeclaringType.Name}", Settings.WarningColor), false);
+                        Debug.LogWarning($"[DevCon] Could not find static IEnumerable<string> {attr.AutoCompleteProvider}() in {method.DeclaringType.Name}");
                     }
                 }
 
@@ -486,12 +504,13 @@ namespace NoSlimes.Util.DevCon
 
             if (paramType == typeof(bool))
                 return new[] { "true", "false" }
-                .Where(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                .Where(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)); // Reverse to suggest 'true' first
 
             if (paramType.IsEnum)
             {
                 return Enum.GetNames(paramType)
-                    .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                    .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(name => name); 
             }
 
             return Array.Empty<string>();
