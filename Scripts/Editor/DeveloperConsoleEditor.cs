@@ -28,6 +28,7 @@ namespace NoSlimes.Util.DevCon.Editor
 
         // Customization
         private SerializedProperty bgColorProp;
+        private SerializedProperty accentColorProp;
         private SerializedProperty textColorProp;
         private SerializedProperty warningColorProp;
         private SerializedProperty errorColorProp;
@@ -66,6 +67,7 @@ namespace NoSlimes.Util.DevCon.Editor
 
             // Customization
             bgColorProp = serializedObject.FindProperty("backgroundColor");
+            accentColorProp = serializedObject.FindProperty("accentColor");
             textColorProp = serializedObject.FindProperty("textColor");
             warningColorProp = serializedObject.FindProperty("warningColor");
             errorColorProp = serializedObject.FindProperty("errorColor");
@@ -138,6 +140,7 @@ namespace NoSlimes.Util.DevCon.Editor
 
                 EditorGUILayout.LabelField("Colors", EditorStyles.boldLabel);
                 EditorGUILayout.PropertyField(bgColorProp);
+                EditorGUILayout.PropertyField(accentColorProp);
                 EditorGUILayout.PropertyField(textColorProp);
                 EditorGUILayout.PropertyField(warningColorProp);
                 EditorGUILayout.PropertyField(errorColorProp);

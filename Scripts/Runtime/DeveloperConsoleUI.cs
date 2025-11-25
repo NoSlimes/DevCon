@@ -39,11 +39,12 @@ namespace NoSlimes.Util.DevCon
         [SerializeField] private char commandSeparator = '|';
 
         [SerializeField] private Color backgroundColor = new Color(0f, 0f, 0f, 0.95f);
+        [SerializeField] private Color accentColor = new Color(1f, 1f, 1f, 1f);
         [SerializeField] private Color textColor = Color.white;
         [SerializeField] private Color warningColor = Color.yellow;
         [SerializeField] private Color errorColor = Color.red;
         [SerializeField] private Color exceptionColor = Color.red;
-        [SerializeField] private Color assertColor = Color.red;
+        [SerializeField] private Color assertColor = new(1, 0.6f, 0.6f);
 
         [SerializeField] private TMP_FontAsset consoleFont;
         [SerializeField] private int inputFontSize = 14;
@@ -59,11 +60,11 @@ namespace NoSlimes.Util.DevCon
         private List<string> currentMatches = new List<string>();
         private int autoCompleteIndex = -1;
         private string cachedBaseCommand = "";
-        private bool ignoreNextValueChange = false; 
+        private bool ignoreNextValueChange = false;
 
         public static event Action<bool> OnConsoleToggled;
 
-        private void Awake()
+        protected virtual void Awake()
         {
             if (_instance != null && _instance != this)
             {
@@ -97,11 +98,19 @@ namespace NoSlimes.Util.DevCon
             ApplyStyles();
         }
 
-        private void ApplyStyles()
+        protected virtual void ApplyStyles()
         {
-            if(consolePanel.TryGetComponent(out Image consolePanelImage))
+            if (consolePanel.TryGetComponent(out Image consolePanelImage))
             {
                 consolePanelImage.color = backgroundColor;
+            }
+
+            foreach (var img in consolePanel.GetComponentsInChildren<Image>())
+            {
+                if (img.gameObject != consolePanel && img.gameObject != inputField.gameObject)
+                {
+                    img.color = accentColor;
+                }
             }
 
             if (consoleFont != null)
@@ -112,6 +121,11 @@ namespace NoSlimes.Util.DevCon
 
             inputField.textComponent.fontSize = inputFontSize;
             consoleLog.fontSize = logFontSize;
+
+            ConsoleCommandInvoker.Settings.TextColor = textColor;
+            ConsoleCommandInvoker.Settings.WarningColor = warningColor;
+            ConsoleCommandInvoker.Settings.ErrorColor = errorColor;
+            ConsoleCommandInvoker.Settings.SecondaryErrorColor = Color.Lerp(errorColor, Color.white, 0.4f);
         }
 
         private void HandleCacheLoaded(double ms)
@@ -309,8 +323,8 @@ namespace NoSlimes.Util.DevCon
 
         private void LogToConsole(string message, bool success)
         {
-            string color = success ? "white" : "red";
-            LogToConsole($"<color={color}>{message}</color>");
+            string color = success ? ColorUtility.ToHtmlStringRGBA(textColor) : ColorUtility.ToHtmlStringRGBA(errorColor);
+            LogToConsole($"<color=#{color}>{message}</color>");
         }
 
         private IEnumerator ScrollToBottomCoroutine()

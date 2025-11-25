@@ -1215,7 +1215,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0, g: 0, b: 0, a: 0.9607843}
+  m_Color: {r: 0, g: 0, b: 0, a: 0.95}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -1296,7 +1296,7 @@ MonoBehaviour:
   warningColor: {r: 1, g: 0.92156863, b: 0.015686275, a: 1}
   errorColor: {r: 1, g: 0, b: 0, a: 1}
   exceptionColor: {r: 1, g: 0, b: 0, a: 1}
-  assertColor: {r: 1, g: 0, b: 0, a: 1}
+  assertColor: {r: 1, g: 0.6, b: 0.6, a: 1}
   consoleFont: {fileID: 11400000, guid: bc6c37bf910742642a3e463c2ccd18c4, type: 2}
   inputFontSize: 14
   logFontSize: 20

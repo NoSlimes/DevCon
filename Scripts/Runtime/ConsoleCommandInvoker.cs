@@ -8,6 +8,22 @@ using UnityEngine;
 
 namespace NoSlimes.Util.DevCon
 {
+    public partial class ConsoleCommandInvoker
+    {
+        public static class Settings
+        {
+            public static Color TextColor = Color.white;
+            public static Color WarningColor = Color.yellow;
+            public static Color ErrorColor = Color.red;
+            public static Color SecondaryErrorColor = new(1f, 0.6f, 0.6f);
+        }
+
+        private static string Colorize(string text, Color color)
+        {
+            return $"<color=#{ColorUtility.ToHtmlStringRGBA(color)}>{text}</color>";
+        }
+    }
+
     public static partial class ConsoleCommandInvoker
     {
 
@@ -161,7 +177,7 @@ namespace NoSlimes.Util.DevCon
         {
             if (string.IsNullOrWhiteSpace(input)) return;
 
-            LogHandler("> " + input, true);
+            LogHandler(Colorize("> ", Settings.TextColor) + input, true);
 
             string[] parts = Tokenize(input);
             if (parts.Length == 0) return;
@@ -171,7 +187,7 @@ namespace NoSlimes.Util.DevCon
 
             if (!ConsoleCommandRegistry.Commands.TryGetValue(command, out List<MethodInfo> methodList))
             {
-                LogHandler($"<color=yellow>Unknown command: '{command}'. Type 'help' for a list of commands.</color>", false);
+                LogHandler(Colorize($"Unknown command: '{command}'. Type 'help' for a list of commands.", Settings.WarningColor), false);
                 return;
             }
 
@@ -258,10 +274,10 @@ namespace NoSlimes.Util.DevCon
 
             if (matchedMethod == null)
             {
-                LogHandler($"<color=red>Could not execute '{command}'. Potential reasons:</color>", false);
+                LogHandler(Colorize($"Could not execute '{command}'. Potential reasons:.", Settings.ErrorColor), false);
                 foreach (string error in candidateErrors)
                 {
-                    LogHandler($"<color=#ffaaaa>- {error}</color>", false);
+                    LogHandler(Colorize($"- {error}", Settings.SecondaryErrorColor), false);
                 }
                 return;
             }
@@ -275,7 +291,7 @@ namespace NoSlimes.Util.DevCon
 
                     bool BlockLocal(string reason)
                     {
-                        LogHandler($"Cannot run '{attr.Command}': {reason}.", false);
+                        LogHandler(Colorize($"Cannot run '{attr.Command}': {reason}.", Settings.WarningColor), false);
                         return true;
                     }
 
@@ -292,12 +308,16 @@ namespace NoSlimes.Util.DevCon
                 }
                 catch (Exception e)
                 {
-                    LogHandler($"<color=red>Error while executing '{command}': {e.InnerException?.Message ?? e.Message}</color>", false);
+                    string exceptionString = "";
+#if DEBUG
+                    exceptionString = e.InnerException.Message;
+#endif
+                    LogHandler(Colorize($"Error: An exception occurred while executing command '{command}': {exceptionString}", Settings.ErrorColor), false);
                 }
             }
             else
             {
-                LogHandler($"<color=red>Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.</color>", false);
+                LogHandler(Colorize($"Error: Could not find instance of '{matchedMethod.DeclaringType.Name}' for command '{command}'.", Settings.ErrorColor), false);
             }
         }
 
@@ -308,7 +328,6 @@ namespace NoSlimes.Util.DevCon
                 .Select(p => $"{p.ParameterType.Name} {p.Name}")
                 .ToArray();
 
-            // Om inga parametrar finns, visa ()
             if (pars.Length == 0) return "void";
 
             return string.Join(", ", pars);
@@ -327,7 +346,7 @@ namespace NoSlimes.Util.DevCon
             }
             else
             {
-                LogHandler($"<color=red>Error: Non-static command methods must belong to a UnityEngine.Object subclass.</color>", false);
+                LogHandler(Colorize("Error: Non-static command methods must belong to a UnityEngine.Object subclass", Settings.ErrorColor), false);
             }
 
             return targetInstance;
@@ -398,7 +417,7 @@ namespace NoSlimes.Util.DevCon
                 }
                 else
                 {
-                    helpBuilder.AppendLine($"<color=yellow>Unknown command: '{cmdName}'</color>");
+                    helpBuilder.AppendLine(Colorize($"Unknown command: '{cmdName}'", Settings.WarningColor));
                 }
             }
 
@@ -435,6 +454,7 @@ namespace NoSlimes.Util.DevCon
                     else
                     {
                         SuggestionMethodCache[method] = null;
+                        LogHandler(Colorize($"Could not find static IEnumerable<string> {attr.AutoCompleteProviderName}() in {method.DeclaringType.Name}", Settings.WarningColor), false);
                         Debug.LogWarning($"[DevCon] Could not find static IEnumerable<string> {attr.AutoCompleteProviderName}() in {method.DeclaringType.Name}");
                     }
                 }
@@ -455,6 +475,10 @@ namespace NoSlimes.Util.DevCon
                     }
                     else
                     {
+#if DEBUG
+                        LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
+#endif
+
                         Debug.LogWarning($"[DevCon] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
                     }
                 }
