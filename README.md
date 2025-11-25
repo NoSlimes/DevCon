@@ -1,3 +1,11 @@
+## Setup
+
+Use the menu to create and add the Developer Console prefab to your scene:  
+- `Assets → Create → DevCon → Developer Console`  
+- `Tools → DevCon → Create Developer Console Prefab`  
+
+This will create a prefab variant in the folder currently open in the Project window.
+
 ## Command Parameters
 
 When defining commands, methods can have the following parameters:
