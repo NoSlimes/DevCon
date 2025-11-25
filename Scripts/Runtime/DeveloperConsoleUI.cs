@@ -1,11 +1,13 @@
-using UnityEngine;
-using UnityEngine.InputSystem;
-using TMPro;
-using UnityEngine.UI;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection; // Required for MethodInfo
+using System.Text.RegularExpressions;
+using TMPro;
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -40,9 +42,11 @@ namespace NoSlimes.Util.DevCon
         private int commandHistoryIndex = -1;
         private CursorLockMode originalCursorLockMode;
 
+        // Autocomplete state
         private string lastTypedPrefix = "";
         private List<string> currentMatches = new List<string>();
         private int autoCompleteIndex = -1;
+        private string cachedBaseCommand = ""; // Stores "cmd arg1 " so we can append the suggestion
 
         public static event Action<bool> OnConsoleToggled;
 
@@ -72,8 +76,6 @@ namespace NoSlimes.Util.DevCon
             GetComponentInChildren<Canvas>().sortingOrder = 1000;
             if (dontDestroyOnLoad) DontDestroyOnLoad(gameObject);
 
-
-
             ConsoleCommandRegistry.OnCacheLoaded += HandleCacheLoaded;
             ConsoleCommandRegistry.LoadCache();
 
@@ -101,7 +103,7 @@ namespace NoSlimes.Util.DevCon
                 foreach (var singleCommand in commands)
                 {
                     string trimmedCommand = singleCommand.Trim();
-                    if (string.IsNullOrEmpty(trimmedCommand)) continue; 
+                    if (string.IsNullOrEmpty(trimmedCommand)) continue;
 
                     ConsoleCommandInvoker.Execute(trimmedCommand);
                 }
@@ -113,7 +115,14 @@ namespace NoSlimes.Util.DevCon
 
                 inputField.text = "";
                 commandHistoryIndex = -1;
+                lastTypedPrefix = "";
+                currentMatches.Clear();
                 FocusInputField();
+            });
+
+            inputField.onValueChanged.AddListener((val) =>
+            {
+                autoCompleteIndex = -1;
             });
 
             consolePanel.SetActive(false);
@@ -151,6 +160,7 @@ namespace NoSlimes.Util.DevCon
                 Application.logMessageReceived -= HandleLogMessage;
 
             inputField.onSubmit.RemoveAllListeners();
+            inputField.onValueChanged.RemoveAllListeners();
 
 #if ENABLE_INPUT_SYSTEM
             if (inputSystem == InputSystemType.New)
@@ -295,77 +305,102 @@ namespace NoSlimes.Util.DevCon
             string fullInput = inputField.text;
             if (string.IsNullOrWhiteSpace(fullInput)) return;
 
-            string commandPrefix = ""; 
-            string activeCommand;      
-
+            string globalPrefix = "";
+            string activeCommand = fullInput;
             int lastSeparatorIndex = fullInput.LastIndexOf(commandSeparator);
 
             if (lastSeparatorIndex != -1)
             {
-                commandPrefix = fullInput.Substring(0, lastSeparatorIndex + 1);
+                globalPrefix = fullInput.Substring(0, lastSeparatorIndex + 1);
                 activeCommand = fullInput.Substring(lastSeparatorIndex + 1);
             }
-            else
+
+            string whitespaceBeforeCmd = "";
+            if (activeCommand.Length > 0 && char.IsWhiteSpace(activeCommand[0]))
             {
-                commandPrefix = "";
-                activeCommand = fullInput;
+                int trimStart = 0;
+                while (trimStart < activeCommand.Length && char.IsWhiteSpace(activeCommand[trimStart]))
+                    trimStart++;
+
+                whitespaceBeforeCmd = activeCommand.Substring(0, trimStart);
+                activeCommand = activeCommand.TrimStart();
             }
 
-            string trimmedActiveCommand = activeCommand.TrimStart();
-            if (string.IsNullOrEmpty(trimmedActiveCommand)) return;
+            if (string.IsNullOrEmpty(activeCommand)) return;
 
-            string[] parts = trimmedActiveCommand.Split(' ');
-            bool isHelpArg = parts.Length > 1 && parts[0].ToLower() == "help";
-            string typedPrefix = isHelpArg ? (parts.Length > 1 ? parts[1] : "") : parts[0];
+            var tokenMatches = Regex.Matches(activeCommand, @"[\""].+?[\""]|[^ ]+");
+            var partsList = tokenMatches.Cast<Match>().Select(m => m.Value).ToList();
 
-            if (typedPrefix != lastTypedPrefix)
+            if (activeCommand.EndsWith(" "))
+                partsList.Add("");
+
+            string[] parts = partsList.ToArray();
+
+            int currentPartIndex = parts.Length - 1;
+            string typedPrefix = parts[currentPartIndex];
+
+            string cleanPrefix = typedPrefix.Replace("\"", "");
+            bool isHelpArg = (parts.Length > 1 && parts[0].Equals("help", StringComparison.OrdinalIgnoreCase));
+
+            if (typedPrefix != lastTypedPrefix || currentMatches.Count == 0 || autoCompleteIndex == -1)
             {
                 lastTypedPrefix = typedPrefix;
                 autoCompleteIndex = -1;
+                currentMatches.Clear();
 
-                currentMatches = ConsoleCommandRegistry.Commands.Keys
-                    .Where(k => k.StartsWith(typedPrefix, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-
-                if (currentMatches.Count > 1)
+                if (currentPartIndex == 0 || isHelpArg)
                 {
-                    LogToConsole((isHelpArg ? "Help matches: " : "Matches: ") + string.Join(", ", currentMatches));
-                }
-                else if (currentMatches.Count == 1)
-                {
-                    if (isHelpArg) parts[1] = currentMatches[0];
-                    else parts[0] = currentMatches[0];
-
-                    string completedSegment = string.Join(" ", parts);
-
-                    string leadingWhitespace = activeCommand.Substring(0, activeCommand.Length - trimmedActiveCommand.Length);
-                    inputField.text = commandPrefix + leadingWhitespace + completedSegment;
-
-                    lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
-                    StartCoroutine(MoveCaretToEndCoroutine());
-                    return;
+                    currentMatches = ConsoleCommandRegistry.Commands.Keys
+                        .Where(k => k.StartsWith(cleanPrefix, StringComparison.OrdinalIgnoreCase))
+                        .OrderBy(k => k)
+                        .ToList();
                 }
                 else
                 {
-                    currentMatches.Clear();
+                    string commandName = parts[0].ToLower();
+
+                    if (ConsoleCommandRegistry.Commands.TryGetValue(commandName, out List<MethodInfo> methods))
+                    {
+                        int methodArgIndex = currentPartIndex - 1;
+                        HashSet<string> distinctSuggestions = new HashSet<string>();
+
+                        foreach (var method in methods)
+                        {
+                            var suggestions = ConsoleCommandInvoker.GetAutoCompleteSuggestions(method, methodArgIndex, cleanPrefix);
+                            foreach (var s in suggestions) distinctSuggestions.Add(s);
+                        }
+
+                        currentMatches = distinctSuggestions.OrderBy(s => s).ToList();
+                    }
                 }
 
-                return; 
+                if (parts.Length > 1)
+                {
+                    string preSegments = string.Join(" ", parts, 0, parts.Length - 1);
+                    cachedBaseCommand = globalPrefix + whitespaceBeforeCmd + preSegments + " ";
+                }
+                else
+                {
+                    cachedBaseCommand = globalPrefix + whitespaceBeforeCmd;
+                }
             }
 
             if (currentMatches.Count == 0) return;
 
             autoCompleteIndex = (autoCompleteIndex + 1) % currentMatches.Count;
+            string selectedMatch = currentMatches[autoCompleteIndex];
 
-            if (isHelpArg) parts[1] = currentMatches[autoCompleteIndex];
-            else parts[0] = currentMatches[autoCompleteIndex];
+            if (selectedMatch.Contains(" "))
+            {
+                if (!selectedMatch.StartsWith("\""))
+                {
+                    selectedMatch = $"\"{selectedMatch}\"";
+                }
+            }
 
-            string cycledSegment = string.Join(" ", parts);
+            inputField.text = cachedBaseCommand + selectedMatch;
+            lastTypedPrefix = selectedMatch;
 
-            string leadingWhitespaceCycle = activeCommand.Substring(0, activeCommand.Length - trimmedActiveCommand.Length);
-            inputField.text = commandPrefix + leadingWhitespaceCycle + cycledSegment;
-
-            lastTypedPrefix = isHelpArg ? parts[1] : parts[0];
             StartCoroutine(MoveCaretToEndCoroutine());
         }
 

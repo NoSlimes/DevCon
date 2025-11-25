@@ -143,9 +143,58 @@ public static void GodModeCommand(Action<string> response)
 ```
 ---
 
-### 6. Auto-completion
+Here is the updated section 6, expanded to include the new functionality for registering auto-complete methods.
 
-* DevCon supports tab-based auto-completion for commands.
-* Command names are matched case-insensitively.
+---
+
+### 6. Auto-completion & Suggestions
+
+DevCon supports tab-based auto-completion for both command names and argument values.
+
+*   **Command Names:** unmatched text is automatically completed against registered commands (case-insensitive).
+*   **Built-in Types:** Arguments of type `bool` (true/false) and `enum` are automatically auto-completed.
+
+#### Custom Argument Suggestions
+
+You can provide dynamic suggestions for your string arguments (e.g., Item IDs, Enemy Names) by referencing a static method in the `[ConsoleCommand]` attribute.
+
+**How to register:**
+1.  Create a `static` method in the same class that returns `IEnumerable<string>` (or `string[]`).
+2.  Pass the method's name to the `autoCompleteMethod` parameter in the attribute.
+
+**Example 1: Simple List (System handles filtering)**
+Useful for small lists. The system retrieves all options and filters them based on what the user typed.
+
+```csharp
+[ConsoleCommand("spawn", "Spawns an entity.", autoCompleteMethod: "GetEntityNames")]
+public static void SpawnCommand(string entityName)
+{
+    // Spawn logic...
+}
+
+// Can be private, must be static
+private static IEnumerable<string> GetEntityNames()
+{
+    return new[] { "Slime", "Goblin", "Dragon", "Skeleton" };
+}
+```
+
+**Example 2: Advanced Filtering (You handle filtering)**
+Useful for large datasets (like item databases). If your method accepts a `string` parameter, DevCon will pass the current input prefix to you, allowing you to optimize the search.
+
+```csharp
+[ConsoleCommand("give", "Gives an item.", autoCompleteMethod: "SearchItems")]
+public static void GiveCommand(string itemId) { ... }
+
+// The 'prefix' contains what the user has typed so far (e.g., "Swor")
+private static IEnumerable<string> SearchItems(string prefix)
+{
+    return ItemDatabase.AllItems
+        .Where(item => item.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        .Select(item => item.Name);
+}
+```
+
+*Note: If a suggestion contains spaces (e.g., `"Big Slime"`), it will automatically be wrapped in quotes when selected.*
 
 ---

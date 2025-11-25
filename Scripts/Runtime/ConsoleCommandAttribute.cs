@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using UnityEngine.InputSystem.Utilities;
 
 namespace NoSlimes.Util.DevCon
 {
@@ -16,11 +18,18 @@ namespace NoSlimes.Util.DevCon
     [AttributeUsage(AttributeTargets.Method, Inherited = false, AllowMultiple = false)]
     public sealed class ConsoleCommandAttribute : Attribute
     {
-        public string Command { get; }
-        public string Description { get; }
-        public CommandFlags Flags { get; set; } = CommandFlags.None;
+        internal string Command { get; }
+        internal string Description { get; }
+        internal CommandFlags Flags { get; set; } = CommandFlags.None;
 
-        public ConsoleCommandAttribute(string command, string description = "", CommandFlags flags = CommandFlags.None)
+        internal string AutoCompleteProviderName { get; set; } = "";
+
+
+        public ConsoleCommandAttribute(
+            string command,
+            string description = "",
+            CommandFlags flags = CommandFlags.None,
+            string autoCompleteMethod = "")
         {
             if ((flags & CommandFlags.DebugOnly) != 0 && (flags & CommandFlags.EditorOnly) != 0)
             {
@@ -30,6 +39,7 @@ namespace NoSlimes.Util.DevCon
             Command = command;
             Description = description;
             Flags = flags;
+            AutoCompleteProviderName = autoCompleteMethod;
         }
     }
 }

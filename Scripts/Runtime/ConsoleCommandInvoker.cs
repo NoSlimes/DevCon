@@ -117,6 +117,8 @@ namespace NoSlimes.Util.DevCon
         );
 
         private static readonly Dictionary<Type, Func<string, object>> ArgConverters = new();
+        private static readonly Dictionary<Type, MethodInfo> CachedProviders = new();
+        private static readonly Dictionary<MethodInfo, MethodInfo> SuggestionMethodCache = new();
 
         public static void RegisterArgConverter<T>(Func<string, T> converter)
         {
@@ -257,7 +259,7 @@ namespace NoSlimes.Util.DevCon
             if (matchedMethod == null)
             {
                 LogHandler($"<color=red>Could not execute '{command}'. Potential reasons:</color>", false);
-                foreach (var error in candidateErrors)
+                foreach (string error in candidateErrors)
                 {
                     LogHandler($"<color=#ffaaaa>- {error}</color>", false);
                 }
@@ -301,7 +303,7 @@ namespace NoSlimes.Util.DevCon
 
         private static string GetMethodSignature(MethodInfo method)
         {
-            var pars = method.GetParameters()
+            string[] pars = method.GetParameters()
                 .Where(p => !(p.ParameterType == typeof(Action<string>) || p.ParameterType == typeof(Action<string, bool>)))
                 .Select(p => $"{p.ParameterType.Name} {p.Name}")
                 .ToArray();
@@ -391,7 +393,7 @@ namespace NoSlimes.Util.DevCon
 
                         helpBuilder.AppendLine($"  Description: {attribute.Description}");
                         if (parameters.Length > 0) helpBuilder.AppendLine($"  Arguments: {argsInfo}");
-                        helpBuilder.AppendLine(); 
+                        helpBuilder.AppendLine();
                     }
                 }
                 else
@@ -401,6 +403,74 @@ namespace NoSlimes.Util.DevCon
             }
 
             return helpBuilder.ToString();
+        }
+
+        public static IEnumerable<string> GetAutoCompleteSuggestions(MethodInfo method, int argIndex, string prefix)
+        {
+            var attr = method.GetCustomAttribute<ConsoleCommandAttribute>();
+            var parameters = method.GetParameters();
+
+            bool hasCallback = parameters.Length > 0 &&
+                (parameters[0].ParameterType == typeof(Action<string>) ||
+                 parameters[0].ParameterType == typeof(Action<string, bool>));
+
+            if (hasCallback) argIndex++;
+            if (argIndex >= parameters.Length) return Array.Empty<string>();
+
+            var paramType = parameters[argIndex].ParameterType;
+
+            if (!string.IsNullOrEmpty(attr?.AutoCompleteProviderName))
+            {
+                if (!SuggestionMethodCache.TryGetValue(method, out MethodInfo providerMethod))
+                {
+                    providerMethod = method.DeclaringType.GetMethod(
+                        attr.AutoCompleteProviderName,
+                        BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+
+                    if (providerMethod != null &&
+                        typeof(IEnumerable<string>).IsAssignableFrom(providerMethod.ReturnType))
+                    {
+                        SuggestionMethodCache[method] = providerMethod;
+                    }
+                    else
+                    {
+                        SuggestionMethodCache[method] = null;
+                        Debug.LogWarning($"[DevCon] Could not find static IEnumerable<string> {attr.AutoCompleteProviderName}() in {method.DeclaringType.Name}");
+                    }
+                }
+
+                if (providerMethod != null)
+                {
+                    var providerParams = providerMethod.GetParameters();
+
+
+                    if (providerParams.Length == 1 && providerParams[0].ParameterType == typeof(string))
+                    {
+                        return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
+                    }
+                    else if (providerParams.Length == 0)
+                    {
+                        var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
+                        return suggestions.Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[DevCon] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
+                    }
+                }
+            }
+
+            if (paramType == typeof(bool))
+                return new[] { "true", "false" }
+                .Where(v => v.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+
+            if (paramType.IsEnum)
+            {
+                return Enum.GetNames(paramType)
+                    .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return Array.Empty<string>();
         }
     }
 }
