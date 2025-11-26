@@ -480,24 +480,33 @@ namespace NoSlimes.Util.DevCon
                 if (providerMethod != null)
                 {
                     var providerParams = providerMethod.GetParameters();
+                    var relativeArgIndex = argIndex - (hasCallback ? 1 : 0);
 
-
-                    if (providerParams.Length == 1 && providerParams[0].ParameterType == typeof(string))
+                    switch (providerParams.Length)
                     {
-                        return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
-                    }
-                    else if (providerParams.Length == 0)
-                    {
-                        var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
-                        return suggestions.Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-                    }
-                    else
-                    {
+                        case 2 when providerParams[0].ParameterType == typeof(string) && providerParams[1].ParameterType == typeof(int):
+                            return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix, relativeArgIndex });
+                        case 1 when providerParams[0].ParameterType == typeof(string):
+                            return (IEnumerable<string>)providerMethod.Invoke(null, new object[] { prefix });
+                        case 1 when providerParams[0].ParameterType == typeof(int):
+                            {
+                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, new object[] { relativeArgIndex });
+                                return (suggestions ?? Array.Empty<string>()) 
+                                    .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                            }
+                        case 0:
+                            {
+                                var suggestions = (IEnumerable<string>)providerMethod.Invoke(null, null);
+                                return (suggestions ?? Array.Empty<string>()) 
+                                    .Where(s => s.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+                            }
+                        default:
 #if DEBUG
-                        LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
+                            LogHandler(Colorize($"AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).", Settings.WarningColor), false);
 #endif
 
-                        Debug.LogWarning($"[DevCon] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
+                            Debug.LogWarning($"[DevCon] AutoComplete method '{providerMethod.Name}' has invalid parameters. Expected () or (string).");
+                            break;
                     }
                 }
             }
@@ -510,7 +519,7 @@ namespace NoSlimes.Util.DevCon
             {
                 return Enum.GetNames(paramType)
                     .Where(name => name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    .OrderBy(name => name); 
+                    .OrderBy(name => name);
             }
 
             return Array.Empty<string>();
