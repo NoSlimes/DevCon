@@ -43,7 +43,7 @@ namespace NoSlimes.Util.DevCon
             Flags = flags;
         }
 
-        [Obsolete("Use [ConsoleCommand(cmd, desc, Flags = ..., AutoCompleteProvider = ...)] instead.")]
+        [Obsolete("Use [ConsoleCommand(cmd, desc, AutoCompleteProvider = ...)] instead.")]
         public ConsoleCommandAttribute(string command, string description, string autoCompleteMethod)
         {
             Command = command;
