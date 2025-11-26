@@ -22,6 +22,12 @@ namespace NoSlimes.Util.DevCon
         public CommandFlags Flags { get; set; } = CommandFlags.None;
         public string AutoCompleteProvider { get; set; } = "";
 
+        public ConsoleCommandAttribute(string command)
+        {
+            Command = command;
+            Description = "";
+        }
+
         public ConsoleCommandAttribute(string command, string description)
         {
             Command = command;
@@ -44,13 +50,6 @@ namespace NoSlimes.Util.DevCon
             Description = description;
             Flags = flags;
             AutoCompleteProvider = autoCompleteMethod;
-        }
-
-        [Obsolete("Use [ConsoleCommand(cmd, desc)] instead.")]
-        public ConsoleCommandAttribute(string command)
-        {
-            Command = command;
-            Description = "";
         }
     }
 }
