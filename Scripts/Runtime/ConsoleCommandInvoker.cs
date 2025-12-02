@@ -315,7 +315,7 @@ namespace NoSlimes.Util.DevCon
                 {
                     string exceptionString = $"{e.InnerException?.Message ?? e.Message}";
 #if DEBUG
-                    exceptionString += $"\n {e.StackTrace}";
+                    exceptionString += Colorize($"\n {e.StackTrace}", Settings.SecondaryErrorColor);
 #endif
                     LogHandler(Colorize($"Error: An exception occurred while executing command '{command}'{exceptionString}", Settings.ErrorColor), false);
                 }
