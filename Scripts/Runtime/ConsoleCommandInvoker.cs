@@ -313,9 +313,9 @@ namespace NoSlimes.Util.DevCon
                 }
                 catch (Exception e)
                 {
-                    string exceptionString = "";
+                    string exceptionString = $"{e.InnerException?.Message ?? e.Message}";
 #if DEBUG
-                    exceptionString = $": {e.InnerException?.Message ?? e.Message}";
+                    exceptionString += $"\n {e.StackTrace}";
 #endif
                     LogHandler(Colorize($"Error: An exception occurred while executing command '{command}'{exceptionString}", Settings.ErrorColor), false);
                 }
